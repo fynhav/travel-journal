@@ -106,9 +106,13 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;backgro
 #lock.on{display:flex}
 #lock::before{content:"";position:absolute;top:0;left:0;right:0;height:calc(env(safe-area-inset-top) + 20px);background:var(--band);border-bottom:1px solid var(--line)}
 #lock img{width:96px;height:96px;border-radius:22px;box-shadow:0 2px 10px rgba(46,40,35,.18)}
-#lock h1{font:600 24px/1.2 "New York","Iowan Old Style",Georgia,serif;margin:16px 0 4px}
-#lock p{color:var(--muted);margin:0 0 20px;min-height:22px;font-size:14px;max-width:280px}
-#lock .btn{min-width:230px;margin-bottom:6px}
+#lock h1{font:600 24px/1.2 "New York","Iowan Old Style",Georgia,serif;margin:16px 0 6px}
+#lock p{color:var(--muted);margin:0 0 16px;min-height:22px;font-size:14px;max-width:290px}
+#lock form{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:290px}
+#lock form input{text-align:center}
+#lock form .btn{width:100%}
+#lock .hid{position:absolute;opacity:0;width:1px;height:1px;padding:0;border:0;pointer-events:none}
+#lock .ghost{margin-top:14px}
 #toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(env(safe-area-inset-bottom) + 24px);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -116,7 +120,9 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;backgro
 <body>
 <main id="app"></main>
 <div id="sheet"><div class="bg" data-act="close-sheet"></div><div class="body"></div></div>
-<div id="lock" class="on"><img src="icon-192.png" alt=""><h1>Travel Journal</h1><p id="lockMsg">Locked</p><button class="btn pri" id="lockBtn" data-act="unlock">Unlock with Face ID</button><button class="btn ghost small" id="lockReset" data-act="lock-reset" hidden>Trouble unlocking? Set up again</button></div>
+<div id="lock" class="on"><img src="icon-192.png" alt=""><h1>Travel Journal</h1><p id="lockMsg">Loading…</p>
+<form id="lockForm"><input class="hid" type="text" name="username" value="Travel Journal" autocomplete="username" tabindex="-1" aria-hidden="true"><input id="pw1" type="password" name="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go"><input id="pw2" type="password" placeholder="Repeat password" autocomplete="new-password" enterkeyhint="go" hidden><button class="btn pri" id="lockBtn" type="submit">Unlock</button></form>
+<button class="btn ghost small" id="lockErase" data-act="erase" hidden>Forgot password? Erase and start again</button></div>
 <div id="toast"></div>
 <script>
 'use strict';
@@ -203,13 +209,90 @@ async function shareOrDownload(files, title) {
 // ---------- storage ----------
 const DB = {
   db: null,
-  open() { return new Promise((res, rej) => { const r = indexedDB.open('travel-journal', 1); r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('entries', { keyPath: 'id' }); d.createObjectStore('photos', { keyPath: 'id' }); }; r.onsuccess = () => { this.db = r.result; res(); }; r.onerror = () => rej(r.error); }); },
+  open() { return new Promise((res, rej) => { const r = indexedDB.open('travel-journal', 2); r.onupgradeneeded = () => { const d = r.result; ['entries', 'photos'].forEach(n => { if (!d.objectStoreNames.contains(n)) d.createObjectStore(n, { keyPath: 'id' }); }); if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta'); }; r.onsuccess = () => { this.db = r.result; res(); }; r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error('blocked')); }); },
   req(store, mode, fn) { return new Promise((res, rej) => { const q = fn(this.db.transaction(store, mode).objectStore(store)); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
   all(s) { return this.req(s, 'readonly', o => o.getAll()); },
+  get(s, k) { return this.req(s, 'readonly', o => o.get(k)); },
   put(s, v) { return this.req(s, 'readwrite', o => o.put(v)); },
+  putK(s, v, k) { return this.req(s, 'readwrite', o => o.put(v, k)); },
   del(s, k) { return this.req(s, 'readwrite', o => o.delete(k)); },
-  clear(s) { return this.req(s, 'readwrite', o => o.clear()); }
+  clear(s) { return this.req(s, 'readwrite', o => o.clear()); },
+  tx(ops) { return new Promise((res, rej) => { const t = this.db.transaction(['entries', 'photos', 'meta'], 'readwrite'); ops.forEach(op => op[0] === 'clear' ? t.objectStore(op[1]).clear() : (op.length > 2 ? t.objectStore(op[0]).put(op[1], op[2]) : t.objectStore(op[0]).put(op[1]))); t.oncomplete = () => res(); t.onerror = t.onabort = () => rej(t.error || new Error('Write failed')); }); }
 };
+
+// ---------- encryption (password -> AES-GCM key; nothing readable is stored) ----------
+const ITER = 600000;
+const te = new TextEncoder(), td = new TextDecoder();
+const b64e = b => { const u = new Uint8Array(b); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
+const b64d = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+const Vault = {
+  key: null, salt: null, iter: ITER, apiKey: '',
+  async derive(pw, salt, iter) {
+    const km = await crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  },
+  async seal(buf, key = this.key) {
+    if (!key) throw new Error('Journal is locked');
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    return { iv, ct: await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buf) };
+  },
+  open(r, key = this.key) {
+    if (!key) throw new Error('Journal is locked');
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: r.iv }, key, r.ct);
+  },
+  async check(pw, rec) {
+    const key = await this.derive(pw, rec.salt, rec.iter);
+    try { return td.decode(await this.open(rec.check, key)) === 'travel-journal' ? key : null; } catch { return null; }
+  },
+  async setup(pw) {
+    const salt = crypto.getRandomValues(new Uint8Array(16)), key = await this.derive(pw, salt, ITER);
+    const check = await this.seal(te.encode('travel-journal'), key);
+    await DB.putK('meta', { salt, iter: ITER, check }, 'vault');
+    this.key = key; this.salt = salt; this.iter = ITER;
+    await this.loadApiKey(); await migratePlain(); await load();
+  },
+  async unlock(pw) {
+    const rec = await DB.get('meta', 'vault'); if (!rec) return false;
+    const key = await this.check(pw, rec); if (!key) return false;
+    this.key = key; this.salt = rec.salt; this.iter = rec.iter;
+    await this.loadApiKey(); await migratePlain(); await load();
+    return true;
+  },
+  async loadApiKey() {
+    this.apiKey = '';
+    const r = await DB.get('meta', 'apikey');
+    if (r) this.apiKey = td.decode(await this.open(r));
+    const old = lsGet('tj.key');
+    if (old) { if (!this.apiKey) { this.apiKey = old; await this.saveApiKey(); } try { localStorage.removeItem('tj.key'); } catch {} }
+  },
+  async saveApiKey() {
+    if (!this.key) return;
+    if (!this.apiKey) { await DB.del('meta', 'apikey'); return; }
+    await DB.putK('meta', await this.seal(te.encode(this.apiKey)), 'apikey');
+  }
+};
+async function encEntry(e, key = Vault.key) { const { iv, ct } = await Vault.seal(te.encode(JSON.stringify(e)), key); return { id: e.id, iv, ct }; }
+async function decEntry(r) { return JSON.parse(td.decode(await Vault.open(r))); }
+async function encPhoto(p, key = Vault.key) {
+  const { blob, ...meta } = p;
+  const m = await Vault.seal(te.encode(JSON.stringify(meta)), key), b = await Vault.seal(await blob.arrayBuffer(), key);
+  return { id: p.id, iv: m.iv, ct: m.ct, biv: b.iv, bct: b.ct };
+}
+async function decPhoto(r) {
+  const meta = JSON.parse(td.decode(await Vault.open(r))), bytes = await Vault.open({ iv: r.biv, ct: r.bct });
+  return { ...meta, blob: new Blob([bytes], { type: 'image/jpeg' }) };
+}
+const putEntry = async e => DB.put('entries', await encEntry(e));
+const putPhoto = async p => DB.put('photos', await encPhoto(p));
+async function migratePlain() {
+  for (const r of await DB.all('entries')) if (!r.iv) await putEntry({ days: {}, qa: [], countries: [], notes: '', title: '', ...r });
+  for (const r of await DB.all('photos')) if (!r.iv) await putPhoto({ caption: '', place: '', ...r });
+}
+async function load() {
+  S.entries = await Promise.all((await DB.all('entries')).map(decEntry));
+  S.photos = await Promise.all((await DB.all('photos')).map(decPhoto));
+  for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; }
+}
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
@@ -229,13 +312,14 @@ function pickFixed(n, used) { const pool = FIXED.filter(q => !used.includes(q));
 
 const timers = new Map();
 function sched(key, fn) { clearTimeout(timers.get(key)?.t); timers.set(key, { fn, t: setTimeout(() => { timers.delete(key); fn(); }, 400) }); }
-function flush() { for (const [k, v] of timers) { clearTimeout(v.t); v.fn(); } timers.clear(); }
-const saveEntry = e => { e.updated = Date.now(); return DB.put('entries', e); };
+function flush() { const ps = []; for (const [k, v] of timers) { clearTimeout(v.t); ps.push(v.fn()); } timers.clear(); return Promise.all(ps); }
+const saveEntry = e => { e.updated = Date.now(); return putEntry(e); };
 const schedEntry = e => sched('e' + e.id, () => saveEntry(e));
-const schedPhoto = p => sched('p' + p.id, () => DB.put('photos', p));
+const schedPhoto = p => sched('p' + p.id, () => putPhoto(p));
 
 // ---------- views ----------
 function render() {
+  if (Lock.locked) return;
   $('#app').innerHTML = S.view === 'cal' ? calHTML() : entryHTML(cur());
   $$('textarea').forEach(autosize);
 }
@@ -324,21 +408,25 @@ function entryHTML(e) {
 
 // ---------- sheet ----------
 function openSheet(html) { $('#sheet .body').innerHTML = html; $('#sheet').classList.add('on'); $$('#sheet textarea').forEach(autosize); }
-function closeSheet() { flush(); $('#sheet').classList.remove('on'); if (S.view === 'entry') rerender(); }
+function closeSheet() { if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on'); if (S.view === 'entry') rerender(); }
 
+let askRes = null;
+function askPassword(msg) {
+  return new Promise(res => { askRes = res; openSheet(`<h3>Backup password</h3><p class="hint" style="margin-top:0">${esc(msg)}</p><label>Password<input id="askPw" type="password" autocomplete="off"></label><div class="btns"><button class="btn pri" data-act="ask-ok" style="flex:1">Continue</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`); });
+}
 function openSettings() {
   const lastB = +lsGet('tj.lastBackup') || 0;
   openSheet(`<h3>Settings</h3>
-    <label>Anthropic API key (for ✨ smart questions)<input type="password" data-field="key" value="${esc(lsGet('tj.key') || '')}" placeholder="sk-ant-…" autocomplete="off"></label>
-    <p class="hint">Kept only on this phone. Without a key you still get the fixed questions.</p>
-    <h2 style="margin-top:18px">Privacy lock</h2>
-    <p class="hint" style="margin-top:0">${Lock.supported ? 'Face ID (or your passcode) opens the journal, and is asked for again after the app has been away for a minute.' : "This device can't offer Face ID or a screen-lock check, so the journal can't lock itself."}</p>
-    ${Lock.supported ? '<div class="btns"><button class="btn" data-act="lock-now">Lock now</button></div>' : ''}
+    <h2>Privacy lock</h2>
+    <p class="hint" style="margin-top:0">Everything is encrypted on this phone with your password, and the journal locks after a minute away from the app.</p>
+    <div class="btns"><button class="btn" data-act="lock-now">Lock now</button><button class="btn" data-act="change-pw">Change password</button></div>
+    <label style="margin-top:18px">Anthropic API key (for ✨ smart questions)<input type="password" data-field="key" value="${esc(Vault.apiKey)}" placeholder="sk-ant-…" autocomplete="off"></label>
+    <p class="hint">Stored encrypted on this phone. Without a key you still get the fixed questions.</p>
     <h2 style="margin-top:18px">iCloud backup</h2>
-    <p class="hint" style="margin-top:0">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive.</p>
-    <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" accept="application/json,.json" data-change="restore" hidden></label></div>
+    <p class="hint" style="margin-top:0">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive. Backups are encrypted, so you'll need your password to restore one.</p>
+    <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" data-change="restore" hidden></label></div>
     <h2 style="margin-top:18px">The book</h2>
-    <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip.</p>
+    <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip. This one is not encrypted, so it can be read by Claude.</p>
     <div class="btns"><button class="btn" data-act="export-book">Export whole book</button></div>
     <div class="stack"><button class="btn ghost" data-act="close-sheet">Close</button></div>`);
 }
@@ -384,7 +472,7 @@ async function addPhotos(files, e) {
       let day = f.lastModified ? iso(new Date(f.lastModified)) : e.start;
       if (day < e.start || day > e.end) day = e.start;
       const p = { id: uid(), entryId: e.id, blob, caption: '', day, place: '', added: Date.now() };
-      await DB.put('photos', p); S.photos.push(p);
+      await putPhoto(p); S.photos.push(p);
     } catch { bad++; }
   }
   rerender();
@@ -392,7 +480,7 @@ async function addPhotos(files, e) {
 }
 
 async function smartQuestions(e, btn) {
-  const key = lsGet('tj.key');
+  const key = Vault.apiKey;
   if (!key) { openSettings(); toast('Add your Anthropic API key first'); return; }
   if (!navigator.onLine) { addFixed(e, 2); toast('No signal, so here are two fixed questions'); return; }
   btn.disabled = true; btn.textContent = 'Thinking…';
@@ -475,21 +563,65 @@ async function exportBook() {
 async function backup() {
   flush();
   toast('Preparing backup…');
-  const photos = await Promise.all(S.photos.map(async ({ blob, ...rest }) => ({ ...rest, data: await blobToDataURL(blob) })));
-  const json = JSON.stringify({ app: 'travel-journal', v: 1, at: new Date().toISOString(), entries: S.entries, photos });
-  const done = await shareOrDownload([new File([json], `travel-journal-backup-${iso(new Date())}.json`, { type: 'application/json' })], 'Travel journal backup');
+  const parts = [], pm = [];
+  for (const p of S.photos) { const { blob, ...rest } = p, buf = await blob.arrayBuffer(); pm.push({ ...rest, size: buf.byteLength }); parts.push(buf); }
+  const meta = te.encode(JSON.stringify({ entries: S.entries, photos: pm, at: new Date().toISOString() }));
+  const ml = new Uint8Array(4); new DataView(ml.buffer).setUint32(0, meta.length);
+  const { iv, ct } = await Vault.seal(await new Blob([ml, meta, ...parts]).arrayBuffer());
+  const header = te.encode(JSON.stringify({ v: 2, salt: b64e(Vault.salt), iter: Vault.iter, iv: b64e(iv) }));
+  const hl = new Uint8Array(4); new DataView(hl.buffer).setUint32(0, header.length);
+  const file = new File([te.encode('TJB2'), hl, header, ct], `travel-journal-backup-${iso(new Date())}.tjbackup`, { type: 'application/octet-stream' });
+  const done = await shareOrDownload([file], 'Travel journal backup');
   if (done) { lsSet('tj.lastBackup', String(Date.now())); if ($('#sheet').classList.contains('on')) openSettings(); else rerender(); }
 }
 async function restore(file) {
-  let d;
-  try { d = JSON.parse(await file.text()); if (d.app !== 'travel-journal' || !Array.isArray(d.entries)) throw 0; }
-  catch { toast("That doesn't look like a Travel Journal backup"); return; }
-  if (!confirm(`Replace everything on this phone with the backup from ${new Date(d.at).toLocaleDateString('en-GB')}? (${d.entries.length} chapters, ${d.photos.length} photos)`)) return;
-  await DB.clear('entries'); await DB.clear('photos');
-  for (const e of d.entries) await DB.put('entries', e);
-  for (const { data, ...rest } of d.photos) await DB.put('photos', { ...rest, blob: await (await fetch(data)).blob() });
-  urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
-  await load(); S.view = 'cal'; $('#sheet').classList.remove('on'); render(); toast('Restored');
+  let data;
+  try {
+    const ab = await file.arrayBuffer(), u = new Uint8Array(ab);
+    if (td.decode(u.subarray(0, 4)) === 'TJB2') {
+      const hl = new DataView(ab).getUint32(4), h = JSON.parse(td.decode(u.subarray(8, 8 + hl)));
+      const rec = { iv: b64d(h.iv), ct: ab.slice(8 + hl) };
+      let plain = null, msg = 'Enter the password this backup was made with.';
+      if (Vault.salt && b64e(Vault.salt) === h.salt && Vault.iter === h.iter) plain = await Vault.open(rec);
+      while (!plain) {
+        const pw = await askPassword(msg); if (pw === null) return;
+        try { plain = await Vault.open(rec, await Vault.derive(pw, b64d(h.salt), h.iter)); } catch { msg = 'That password is not right for this backup. Try again.'; }
+      }
+      $('#sheet').classList.remove('on');
+      const ml = new DataView(plain).getUint32(0), meta = JSON.parse(td.decode(new Uint8Array(plain, 4, ml)));
+      let off = 4 + ml;
+      const photos = meta.photos.map(({ size, ...rest }) => { const blob = new Blob([plain.slice(off, off + size)], { type: 'image/jpeg' }); off += size; return { ...rest, blob }; });
+      data = { entries: meta.entries, photos, at: meta.at };
+    } else {
+      const d = JSON.parse(td.decode(u)); if (d.app !== 'travel-journal' || !Array.isArray(d.entries)) throw 0;
+      data = { entries: d.entries, photos: await Promise.all(d.photos.map(async ({ data, ...rest }) => ({ ...rest, blob: await (await fetch(data)).blob() }))), at: d.at };
+    }
+  } catch { toast("That doesn't look like a Travel Journal backup"); return; }
+  if (!confirm(`Replace everything on this phone with the backup from ${new Date(data.at).toLocaleDateString('en-GB')}? (${data.entries.length} chapters, ${data.photos.length} photos)`)) return;
+  const ops = [['clear', 'entries'], ['clear', 'photos']];
+  for (const e of data.entries) ops.push(['entries', await encEntry(e)]);
+  for (const p of data.photos) ops.push(['photos', await encPhoto(p)]);
+  await DB.tx(ops);
+  urls.forEach(x => URL.revokeObjectURL(x)); urls.clear();
+  await load(); S.view = 'cal'; S.openId = null; $('#sheet').classList.remove('on'); render(); toast('Restored');
+}
+async function changePassword() {
+  const c = $('#cpw0').value, n = $('#cpw1').value, n2 = $('#cpw2').value, msg = $('#cpwMsg');
+  if (n.length < 8) { msg.textContent = 'Use at least 8 characters.'; return; }
+  if (n !== n2) { msg.textContent = "The two new passwords don't match."; return; }
+  msg.textContent = 'Working…';
+  const rec = await DB.get('meta', 'vault');
+  if (!(await Vault.check(c, rec))) { msg.textContent = 'Current password is not right.'; return; }
+  await flush();
+  const salt = crypto.getRandomValues(new Uint8Array(16)), key = await Vault.derive(n, salt, ITER);
+  const check = await Vault.seal(te.encode('travel-journal'), key), ops = [];
+  for (const e of S.entries) ops.push(['entries', await encEntry(e, key)]);
+  for (const p of S.photos) ops.push(['photos', await encPhoto(p, key)]);
+  if (Vault.apiKey) ops.push(['meta', await Vault.seal(te.encode(Vault.apiKey), key), 'apikey']);
+  ops.push(['meta', { salt, iter: ITER, check }, 'vault']);
+  await DB.tx(ops);
+  Vault.key = key; Vault.salt = salt; Vault.iter = ITER;
+  closeSheet(); toast('Password changed');
 }
 function addCountry() {
   const inp = $('#countryIn'), v = inp && inp.value.trim(); if (!v) return;
@@ -549,16 +681,23 @@ document.addEventListener('click', async ev => {
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
-    case 'unlock': Lock.unlock(); break;
-    case 'lock-reset': Lock.reset(); break;
     case 'lock-now': Lock.lock(); break;
+    case 'erase': Lock.erase(); break;
+    case 'ask-ok': { const r = askRes, v = $('#askPw').value; askRes = null; if (r) r(v); break; }
+    case 'change-pw': openSheet(`<h3>Change password</h3>
+      <label>Current password<input id="cpw0" type="password" autocomplete="current-password"></label>
+      <label>New password<input id="cpw1" type="password" autocomplete="new-password"></label>
+      <label>Repeat new password<input id="cpw2" type="password" autocomplete="new-password"></label>
+      <p class="hint" id="cpwMsg">Backups made before the change still need your old password.</p>
+      <div class="btns"><button class="btn pri" data-act="chg-ok" style="flex:1">Change password</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`); break;
+    case 'chg-ok': changePassword(); break;
   }
 });
 document.addEventListener('input', ev => {
   const t = ev.target, f = t.dataset.field; if (!f) return;
   const e = cur(), v = t.value;
   if (t.tagName === 'TEXTAREA') autosize(t);
-  if (f === 'key') { lsSet('tj.key', v.trim()); return; }
+  if (f === 'key') { Vault.apiKey = v.trim(); sched('apikey', () => Vault.saveApiKey()); return; }
   if (f === 'pcap' || f === 'pplace') { const p = S.photos.find(x => x.id === t.dataset.id); p[f === 'pcap' ? 'caption' : 'place'] = v; schedPhoto(p); return; }
   if (!e) return;
   if (f === 'title') e.title = v;
@@ -580,7 +719,7 @@ document.addEventListener('change', async ev => {
   } else if (f === 'photos') {
     const files = [...t.files]; t.value = ''; if (files.length) addPhotos(files, e);
   } else if (f === 'pday') {
-    const p = S.photos.find(x => x.id === t.dataset.id); p.day = t.value; await DB.put('photos', p);
+    const p = S.photos.find(x => x.id === t.dataset.id); p.day = t.value; await putPhoto(p);
     const pl = $('#sheet input[data-field="pplace"]'); if (pl) pl.placeholder = e.days[p.day] || 'Same as the day';
   } else if (f === 'restore') {
     const file = t.files[0]; t.value = ''; if (file) restore(file);
@@ -590,65 +729,72 @@ document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' &&
 window.addEventListener('pagehide', flush);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { flush(); Lock.hiddenAt = Date.now(); }
-  else if (Lock.supported && !Lock.locked && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
+  else if (Lock.ready && !Lock.locked && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
 });
 
-// ---------- lock (Face ID via passkey, checked on this phone only) ----------
+// ---------- lock screen ----------
 const Lock = {
-  KEY: 'tj.cred', supported: false, locked: true, busy: false, hiddenAt: 0,
-  enc: b => btoa(String.fromCharCode(...new Uint8Array(b))),
-  dec: t => Uint8Array.from(atob(t), c => c.charCodeAt(0)),
-  async init() {
-    try { this.supported = !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch { this.supported = false; }
-    this.locked = this.supported;
-    if (!this.supported) $('#lock').classList.remove('on');
-    else this.show();
+  mode: 'unlock', busy: false, locked: true, ready: false, hiddenAt: 0, y: 0,
+  async init(dbOk) {
+    $('#lockForm').addEventListener('submit', ev => this.submit(ev));
+    if (!dbOk) { this.setMode('setup', "Storage isn't available in this browser mode, so the journal can't open here."); $('#lockBtn').disabled = true; return; }
+    this.setMode((await DB.get('meta', 'vault')) ? 'unlock' : 'setup');
+    this.ready = true;
   },
-  show(msg) {
-    const has = !!lsGet(this.KEY);
+  setMode(m, msg) {
+    this.mode = m; const setup = m === 'setup';
     $('#lock').classList.add('on');
-    $('#lockBtn').textContent = has ? 'Unlock with Face ID' : 'Set up Face ID lock';
-    $('#lockMsg').textContent = msg || (has ? 'Locked' : 'First time here: set up Face ID so only you can open your journal.');
-    $('#lockReset').hidden = !has;
+    $('#pw1').value = ''; $('#pw2').value = ''; $('#pw2').hidden = !setup;
+    $('#pw1').autocomplete = setup ? 'new-password' : 'current-password';
+    $('#lockBtn').textContent = setup ? 'Create password' : 'Unlock';
+    $('#lockMsg').textContent = msg || (setup ? 'Choose a password. It encrypts everything on this phone. There is no reset: if you forget it, the journal cannot be opened.' : 'Enter your password');
+    $('#lockErase').hidden = setup;
   },
-  lock() {
-    if (!this.supported || this.locked) return;
-    flush(); this.locked = true; this.y = scrollY;
-    $('#sheet').classList.remove('on'); $('#app').innerHTML = '';
-    this.show();
+  say(m) { $('#lockMsg').textContent = m; },
+  async submit(ev) {
+    ev.preventDefault(); if (this.busy) return;
+    const p1 = $('#pw1').value, p2 = $('#pw2').value, btn = $('#lockBtn');
+    if (this.mode === 'setup') { if (p1.length < 8) return this.say('Use at least 8 characters.'); if (p1 !== p2) return this.say("The two passwords don't match."); }
+    else if (!p1) return;
+    this.busy = true; btn.disabled = true; this.say('One moment…');
+    try {
+      if (this.mode === 'setup') await Vault.setup(p1);
+      else if (!(await Vault.unlock(p1))) { this.say('That password is not right.'); $('#pw1').select(); return; }
+      this.open();
+    } catch (err) { this.say('Something went wrong: ' + (err.message || err.name)); }
+    finally { this.busy = false; btn.disabled = false; }
   },
   open() {
-    this.locked = false; $('#lock').classList.remove('on'); render(); scrollTo(0, this.y || 0);
+    this.locked = false; $('#pw1').value = ''; $('#pw2').value = ''; $('#lock').classList.remove('on');
+    if (S.view === 'entry' && !cur()) { S.view = 'cal'; S.openId = null; }
+    render(); scrollTo(0, this.y || 0);
   },
-  async unlock(auto) {
-    if (this.busy) return; this.busy = true;
-    try {
-      const id = lsGet(this.KEY), challenge = crypto.getRandomValues(new Uint8Array(32));
-      if (id) {
-        await navigator.credentials.get({ publicKey: { challenge, rpId: location.hostname, allowCredentials: [{ type: 'public-key', id: this.dec(id) }], userVerification: 'required', timeout: 60000 } });
-      } else {
-        const cred = await navigator.credentials.create({ publicKey: { challenge, rp: { name: 'Travel Journal', id: location.hostname }, user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'journal', displayName: 'Travel Journal' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' }, attestation: 'none', timeout: 60000 } });
-        lsSet(this.KEY, this.enc(cred.rawId));
-      }
-      this.open();
-    } catch (err) {
-      this.show(auto ? '' : (err.name === 'NotAllowedError' ? "Face ID didn't go through. Tap to try again." : "Couldn't use Face ID here: " + (err.message || err.name)));
-    } finally { this.busy = false; }
+  async lock() {
+    if (this.locked || !this.ready) return;
+    this.locked = true;
+    try { await flush(); } catch {}
+    this.y = scrollY;
+    urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
+    S.entries = []; S.photos = []; S.select = null;
+    Vault.key = null; Vault.apiKey = '';
+    $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = '';
+    this.setMode('unlock');
   },
-  reset() { try { localStorage.removeItem(this.KEY); } catch {} this.show('Tap below to set up Face ID again.'); }
+  async erase() {
+    if (!confirm('This permanently deletes every chapter and photo on this phone, and the password. Only do this if you have a backup file to restore from. Continue?')) return;
+    await DB.clear('entries'); await DB.clear('photos'); await DB.clear('meta');
+    try { localStorage.removeItem('tj.lastBackup'); } catch {}
+    S.entries = []; S.photos = []; S.view = 'cal'; S.openId = null;
+    this.setMode('setup', 'Journal erased. Choose a new password.');
+  }
 };
 
 // ---------- start ----------
-async function load() {
-  S.entries = await DB.all('entries'); S.photos = await DB.all('photos');
-  for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; }
-}
 (async () => {
   const n = new Date(); S.month = new Date(n.getFullYear(), n.getMonth(), 1);
-  try { await DB.open(); navigator.storage?.persist?.(); await load(); }
-  catch { toast("Storage isn't available in this browser mode"); }
-  await Lock.init();
-  if (Lock.locked) Lock.unlock(true); else render();
+  let ok = true;
+  try { await DB.open(); navigator.storage?.persist?.(); } catch { ok = false; }
+  await Lock.init(ok);
 })();
 </script>
 </body>
