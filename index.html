@@ -113,6 +113,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;backgro
 #lock form .btn{width:100%}
 #lock .hid{position:absolute;opacity:0;width:1px;height:1px;padding:0;border:0;pointer-events:none}
 #lock .ghost{margin-top:14px}
+.rk{font:600 15px/1.6 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.02em;white-space:nowrap;text-align:center;background:var(--paper);border:1.5px dashed var(--line);border-radius:12px;padding:14px 4px;margin:12px 0;user-select:all;-webkit-user-select:all}
 #toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(env(safe-area-inset-bottom) + 24px);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -121,8 +122,10 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;backgro
 <main id="app"></main>
 <div id="sheet"><div class="bg" data-act="close-sheet"></div><div class="body"></div></div>
 <div id="lock" class="on"><img src="icon-192.png" alt=""><h1>Travel Journal</h1><p id="lockMsg">Loading…</p>
-<form id="lockForm"><input class="hid" type="text" name="username" value="Travel Journal" autocomplete="username" tabindex="-1" aria-hidden="true"><input id="pw1" type="password" name="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go"><input id="pw2" type="password" placeholder="Repeat password" autocomplete="new-password" enterkeyhint="go" hidden><button class="btn pri" id="lockBtn" type="submit">Unlock</button></form>
-<button class="btn ghost small" id="lockErase" data-act="erase" hidden>Forgot password? Erase and start again</button></div>
+<form id="lockForm"><input class="hid" type="text" name="username" value="Travel Journal" autocomplete="username" tabindex="-1" aria-hidden="true"><input id="rk" type="text" placeholder="Recovery key" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" hidden><input id="pw1" type="password" name="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go"><input id="pw2" type="password" placeholder="Repeat password" autocomplete="new-password" enterkeyhint="go" hidden><button class="btn pri" id="lockBtn" type="submit">Unlock</button></form>
+<button class="btn ghost small" id="lockForgot" data-act="forgot" hidden>Forgot password?</button>
+<button class="btn ghost small" id="lockBack" data-act="back-unlock" hidden>Back</button>
+<button class="btn ghost small" id="lockErase" data-act="erase" hidden>No recovery key? Erase and start again</button></div>
 <div id="toast"></div>
 <script>
 'use strict';
@@ -225,38 +228,96 @@ const ITER = 600000;
 const te = new TextEncoder(), td = new TextDecoder();
 const b64e = b => { const u = new Uint8Array(b); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s); };
 const b64d = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+const RK_ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function rkEncode(bytes) { let bits = ''; for (const b of bytes) bits += b.toString(2).padStart(8, '0'); bits = bits.padEnd(130, '0'); let out = ''; for (let i = 0; i < 130; i += 5) out += RK_ALPHA[parseInt(bits.slice(i, i + 5), 2)]; return out; }
+const rkFormat = c => c.match(/.{1,4}/g).join('-');
+function rkDecode(text) {
+  const t = (text || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (t.length !== 26) return null;
+  let bits = ''; for (const ch of t) { const i = RK_ALPHA.indexOf(ch); if (i < 0) return null; bits += i.toString(2).padStart(5, '0'); }
+  const out = new Uint8Array(16); for (let i = 0; i < 16; i++) out[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2); return out;
+}
+const pack = r => ({ iv: b64e(r.iv), ct: b64e(r.ct) });
+const unpack = o => ({ iv: b64d(o.iv), ct: b64d(o.ct) });
+const rand = n => crypto.getRandomValues(new Uint8Array(n));
 const Vault = {
-  key: null, salt: null, iter: ITER, apiKey: '',
+  key: null, salt: null, iter: ITER, rec: null, apiKey: '', needKey: false,
   async derive(pw, salt, iter) {
     const km = await crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveKey']);
     return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: iter, hash: 'SHA-256' }, km, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
   },
   async seal(buf, key = this.key) {
     if (!key) throw new Error('Journal is locked');
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iv = rand(12);
     return { iv, ct: await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, buf) };
   },
   open(r, key = this.key) {
     if (!key) throw new Error('Journal is locked');
     return crypto.subtle.decrypt({ name: 'AES-GCM', iv: r.iv }, key, r.ct);
   },
-  async check(pw, rec) {
-    const key = await this.derive(pw, rec.salt, rec.iter);
-    try { return td.decode(await this.open(rec.check, key)) === 'travel-journal' ? key : null; } catch { return null; }
+  rkKey: b => crypto.subtle.importKey('raw', b, 'AES-GCM', false, ['encrypt', 'decrypt']),
+  dataKey: raw => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']),
+  async verify(key, rec) { try { return td.decode(await this.open(rec.check, key)) === 'travel-journal'; } catch { return false; } },
+  // returns { key, raw } or null. Older journals (no wrap) use the password key directly.
+  async tryPassword(pw, rec) {
+    const kek = await this.derive(pw, rec.salt, rec.iter);
+    if (!rec.wrap) return (await this.verify(kek, rec)) ? { key: kek, raw: null } : null;
+    try { const raw = await this.open(rec.wrap, kek), key = await this.dataKey(raw); return (await this.verify(key, rec)) ? { key, raw } : null; } catch { return null; }
   },
+  async tryRecovery(text, rec) {
+    const b = rkDecode(text); if (!b || !rec || !rec.rwrap) return null;
+    try { const raw = await this.open(rec.rwrap, await this.rkKey(b)), key = await this.dataKey(raw); return (await this.verify(key, rec)) ? { key, raw } : null; } catch { return null; }
+  },
+  async makeRecord(raw, pw, rk) {
+    const salt = rand(16), kek = await this.derive(pw, salt, ITER), key = await this.dataKey(raw);
+    return { key, rec: { v: 2, salt, iter: ITER, wrap: await this.seal(raw, kek), rwrap: rk ? await this.seal(raw, await this.rkKey(rk)) : null, check: await this.seal(te.encode('travel-journal'), key) } };
+  },
+  async rewrapPassword(rec, raw, pw) { const salt = rand(16), kek = await this.derive(pw, salt, ITER); return { ...rec, salt, iter: ITER, wrap: await this.seal(raw, kek) }; },
+  use(rec, key) { this.rec = rec; this.salt = rec.salt; this.iter = rec.iter; this.key = key; },
   async setup(pw) {
-    const salt = crypto.getRandomValues(new Uint8Array(16)), key = await this.derive(pw, salt, ITER);
-    const check = await this.seal(te.encode('travel-journal'), key);
-    await DB.putK('meta', { salt, iter: ITER, check }, 'vault');
-    this.key = key; this.salt = salt; this.iter = ITER;
-    await this.loadApiKey(); await migratePlain(); await load();
+    const raw = rand(32), rk = rand(16), { rec, key } = await this.makeRecord(raw, pw, rk);
+    await DB.putK('meta', rec, 'vault');
+    this.use(rec, key); await this.loadApiKey(); await migratePlain(); await load();
+    return rkFormat(rkEncode(rk));
   },
   async unlock(pw) {
     const rec = await DB.get('meta', 'vault'); if (!rec) return false;
-    const key = await this.check(pw, rec); if (!key) return false;
-    this.key = key; this.salt = rec.salt; this.iter = rec.iter;
-    await this.loadApiKey(); await migratePlain(); await load();
+    const r = await this.tryPassword(pw, rec); if (!r) return false;
+    this.use(rec, r.key); await this.loadApiKey(); await migratePlain(); await load();
+    return rec.wrap ? {} : { recoveryKey: await this.upgrade(pw) };
+  },
+  // one-off: journals made before recovery keys existed get a random data key and a recovery key
+  async upgrade(pw) {
+    const raw = rand(32), rk = rand(16), { rec, key } = await this.makeRecord(raw, pw, rk), ops = [];
+    for (const e of S.entries) ops.push(['entries', await encEntry(e, key)]);
+    for (const p of S.photos) ops.push(['photos', await encPhoto(p, key)]);
+    if (this.apiKey) ops.push(['meta', await this.seal(te.encode(this.apiKey), key), 'apikey']);
+    ops.push(['meta', rec, 'vault']);
+    await DB.tx(ops); this.use(rec, key);
+    return rkFormat(rkEncode(rk));
+  },
+  async recover(text, newPw) {
+    const rec = await DB.get('meta', 'vault'), r = await this.tryRecovery(text, rec); if (!r) return false;
+    const rec2 = await this.rewrapPassword(rec, r.raw, newPw);
+    await DB.putK('meta', rec2, 'vault');
+    this.use(rec2, r.key); await this.loadApiKey(); await migratePlain(); await load();
     return true;
+  },
+  async newRecovery(pw) {
+    const rec = await DB.get('meta', 'vault'), r = await this.tryPassword(pw, rec); if (!r || !r.raw) return null;
+    const rk = rand(16), rec2 = { ...rec, rwrap: await this.seal(r.raw, await this.rkKey(rk)) };
+    await DB.putK('meta', rec2, 'vault'); this.rec = rec2;
+    return rkFormat(rkEncode(rk));
+  },
+  async openBackup(h, rec, text) {
+    try {
+      if (h.wrap) {
+        try { return await this.open(rec, await this.dataKey(await this.open(unpack(h.wrap), await this.derive(text, b64d(h.salt), h.iter)))); } catch {}
+        const b = rkDecode(text);
+        if (b && h.rwrap) return await this.open(rec, await this.dataKey(await this.open(unpack(h.rwrap), await this.rkKey(b))));
+        return null;
+      }
+      return await this.open(rec, await this.derive(text, b64d(h.salt), h.iter));
+    } catch { return null; }
   },
   async loadApiKey() {
     this.apiKey = '';
@@ -408,8 +469,19 @@ function entryHTML(e) {
 
 // ---------- sheet ----------
 function openSheet(html) { $('#sheet .body').innerHTML = html; $('#sheet').classList.add('on'); $$('#sheet textarea').forEach(autosize); }
-function closeSheet() { if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on'); if (S.view === 'entry') rerender(); }
+function closeSheet() { if (keyPending) return; if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on'); if (S.view === 'entry') rerender(); }
 
+let keyPending = false, rkShown = '';
+function showRecoveryKey(code) {
+  keyPending = true; rkShown = code;
+  openSheet(`<h3>Your recovery key</h3>
+    <p class="hint" style="margin-top:0">If you ever forget your password, this key is the only way back in. Keep it somewhere safe that is not this phone, such as a password manager. Anyone who has it can open your journal.</p>
+    <div class="rk">${esc(code)}</div>
+    <div class="btns"><button class="btn" data-act="rk-copy">Copy</button><button class="btn" data-act="rk-file">Save as file</button></div>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:16px;color:var(--ink);font-size:15px"><input type="checkbox" id="rkOk" style="width:auto;flex:none;padding:0"> I've stored it somewhere safe</label>
+    <div class="btns"><button class="btn pri" id="rkDone" data-act="rk-done" style="flex:1" disabled>Done</button></div>`);
+  $('#rkOk').addEventListener('change', ev => { $('#rkDone').disabled = !ev.target.checked; });
+}
 let askRes = null;
 function askPassword(msg) {
   return new Promise(res => { askRes = res; openSheet(`<h3>Backup password</h3><p class="hint" style="margin-top:0">${esc(msg)}</p><label>Password<input id="askPw" type="password" autocomplete="off"></label><div class="btns"><button class="btn pri" data-act="ask-ok" style="flex:1">Continue</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`); });
@@ -420,6 +492,9 @@ function openSettings() {
     <h2>Privacy lock</h2>
     <p class="hint" style="margin-top:0">Everything is encrypted on this phone with your password, and the journal locks after a minute away from the app.</p>
     <div class="btns"><button class="btn" data-act="lock-now">Lock now</button><button class="btn" data-act="change-pw">Change password</button></div>
+    <h2 style="margin-top:18px">Recovery key</h2>
+    <p class="hint" style="margin-top:0">If you forget your password, “Forgot password?” on the lock screen accepts your recovery key. Making a new key cancels the old one.</p>
+    <div class="btns"><button class="btn" data-act="new-rk">Make a new recovery key</button></div>
     <label style="margin-top:18px">Anthropic API key (for ✨ smart questions)<input type="password" data-field="key" value="${esc(Vault.apiKey)}" placeholder="sk-ant-…" autocomplete="off"></label>
     <p class="hint">Stored encrypted on this phone. Without a key you still get the fixed questions.</p>
     <h2 style="margin-top:18px">iCloud backup</h2>
@@ -568,24 +643,25 @@ async function backup() {
   const meta = te.encode(JSON.stringify({ entries: S.entries, photos: pm, at: new Date().toISOString() }));
   const ml = new Uint8Array(4); new DataView(ml.buffer).setUint32(0, meta.length);
   const { iv, ct } = await Vault.seal(await new Blob([ml, meta, ...parts]).arrayBuffer());
-  const header = te.encode(JSON.stringify({ v: 2, salt: b64e(Vault.salt), iter: Vault.iter, iv: b64e(iv) }));
+  const header = te.encode(JSON.stringify({ v: 3, salt: b64e(Vault.salt), iter: Vault.iter, wrap: pack(Vault.rec.wrap), rwrap: Vault.rec.rwrap ? pack(Vault.rec.rwrap) : null, iv: b64e(iv) }));
   const hl = new Uint8Array(4); new DataView(hl.buffer).setUint32(0, header.length);
-  const file = new File([te.encode('TJB2'), hl, header, ct], `travel-journal-backup-${iso(new Date())}.tjbackup`, { type: 'application/octet-stream' });
+  const file = new File([te.encode('TJB3'), hl, header, ct], `travel-journal-backup-${iso(new Date())}.tjbackup`, { type: 'application/octet-stream' });
   const done = await shareOrDownload([file], 'Travel journal backup');
   if (done) { lsSet('tj.lastBackup', String(Date.now())); if ($('#sheet').classList.contains('on')) openSettings(); else rerender(); }
 }
 async function restore(file) {
   let data;
   try {
-    const ab = await file.arrayBuffer(), u = new Uint8Array(ab);
-    if (td.decode(u.subarray(0, 4)) === 'TJB2') {
+    const ab = await file.arrayBuffer(), u = new Uint8Array(ab), magic = td.decode(u.subarray(0, 4));
+    if (magic === 'TJB2' || magic === 'TJB3') {
       const hl = new DataView(ab).getUint32(4), h = JSON.parse(td.decode(u.subarray(8, 8 + hl)));
       const rec = { iv: b64d(h.iv), ct: ab.slice(8 + hl) };
-      let plain = null, msg = 'Enter the password this backup was made with.';
-      if (Vault.salt && b64e(Vault.salt) === h.salt && Vault.iter === h.iter) plain = await Vault.open(rec);
+      let plain = null, msg = 'Enter the password this backup was made with, or its recovery key.';
+      try { plain = await Vault.open(rec); } catch {}
       while (!plain) {
         const pw = await askPassword(msg); if (pw === null) return;
-        try { plain = await Vault.open(rec, await Vault.derive(pw, b64d(h.salt), h.iter)); } catch { msg = 'That password is not right for this backup. Try again.'; }
+        plain = await Vault.openBackup(h, rec, pw);
+        if (!plain) msg = 'That is not right for this backup. Try again.';
       }
       $('#sheet').classList.remove('on');
       const ml = new DataView(plain).getUint32(0), meta = JSON.parse(td.decode(new Uint8Array(plain, 4, ml)));
@@ -610,17 +686,10 @@ async function changePassword() {
   if (n.length < 8) { msg.textContent = 'Use at least 8 characters.'; return; }
   if (n !== n2) { msg.textContent = "The two new passwords don't match."; return; }
   msg.textContent = 'Working…';
-  const rec = await DB.get('meta', 'vault');
-  if (!(await Vault.check(c, rec))) { msg.textContent = 'Current password is not right.'; return; }
-  await flush();
-  const salt = crypto.getRandomValues(new Uint8Array(16)), key = await Vault.derive(n, salt, ITER);
-  const check = await Vault.seal(te.encode('travel-journal'), key), ops = [];
-  for (const e of S.entries) ops.push(['entries', await encEntry(e, key)]);
-  for (const p of S.photos) ops.push(['photos', await encPhoto(p, key)]);
-  if (Vault.apiKey) ops.push(['meta', await Vault.seal(te.encode(Vault.apiKey), key), 'apikey']);
-  ops.push(['meta', { salt, iter: ITER, check }, 'vault']);
-  await DB.tx(ops);
-  Vault.key = key; Vault.salt = salt; Vault.iter = ITER;
+  const rec = await DB.get('meta', 'vault'), r = await Vault.tryPassword(c, rec);
+  if (!r || !r.raw) { msg.textContent = 'Current password is not right.'; return; }
+  const rec2 = await Vault.rewrapPassword(rec, r.raw, n);
+  await DB.putK('meta', rec2, 'vault'); Vault.use(rec2, Vault.key);
   closeSheet(); toast('Password changed');
 }
 function addCountry() {
@@ -683,6 +752,13 @@ document.addEventListener('click', async ev => {
     case 'backup': backup(); break;
     case 'lock-now': Lock.lock(); break;
     case 'erase': Lock.erase(); break;
+    case 'forgot': Lock.setMode('recover'); break;
+    case 'back-unlock': Lock.setMode('unlock'); break;
+    case 'rk-copy': try { await navigator.clipboard.writeText(rkShown); toast('Copied'); } catch { toast('Could not copy. Press and hold the key to select it.'); } break;
+    case 'rk-file': await shareOrDownload([new File(['Travel Journal recovery key\n\n' + rkShown + '\n\nKeep this somewhere safe. Anyone with it can open your journal.\n'], 'travel-journal-recovery-key.txt', { type: 'text/plain' })], 'Recovery key'); break;
+    case 'rk-done': keyPending = false; rkShown = ''; closeSheet(); break;
+    case 'new-rk': openSheet(`<h3>New recovery key</h3><p class="hint" style="margin-top:0">This replaces your old recovery key, which will stop working. Enter your password to continue.</p><label>Password<input id="nrkPw" type="password" autocomplete="current-password"></label><p class="hint" id="nrkMsg"></p><div class="btns"><button class="btn pri" data-act="nrk-ok" style="flex:1">Make new key</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`); break;
+    case 'nrk-ok': { const code = await Vault.newRecovery($('#nrkPw').value); if (!code) { $('#nrkMsg').textContent = 'That password is not right.'; break; } showRecoveryKey(code); break; }
     case 'ask-ok': { const r = askRes, v = $('#askPw').value; askRes = null; if (r) r(v); break; }
     case 'change-pw': openSheet(`<h3>Change password</h3>
       <label>Current password<input id="cpw0" type="password" autocomplete="current-password"></label>
@@ -742,30 +818,43 @@ const Lock = {
     this.ready = true;
   },
   setMode(m, msg) {
-    this.mode = m; const setup = m === 'setup';
+    this.mode = m; const setup = m === 'setup', rec = m === 'recover';
     $('#lock').classList.add('on');
-    $('#pw1').value = ''; $('#pw2').value = ''; $('#pw2').hidden = !setup;
-    $('#pw1').autocomplete = setup ? 'new-password' : 'current-password';
-    $('#lockBtn').textContent = setup ? 'Create password' : 'Unlock';
-    $('#lockMsg').textContent = msg || (setup ? 'Choose a password. It encrypts everything on this phone. There is no reset: if you forget it, the journal cannot be opened.' : 'Enter your password');
-    $('#lockErase').hidden = setup;
+    ['#pw1', '#pw2', '#rk'].forEach(i => { $(i).value = ''; });
+    $('#rk').hidden = !rec; $('#pw2').hidden = !(setup || rec);
+    $('#pw1').placeholder = rec ? 'New password' : 'Password';
+    $('#pw1').autocomplete = (setup || rec) ? 'new-password' : 'current-password';
+    $('#lockBtn').textContent = setup ? 'Create password' : rec ? 'Reset password' : 'Unlock';
+    $('#lockMsg').textContent = msg || (setup ? 'Choose a password. It encrypts everything on this phone. You will get a recovery key next, in case you forget it.' : rec ? 'Enter your recovery key and choose a new password.' : 'Enter your password');
+    $('#lockForgot').hidden = m !== 'unlock'; $('#lockBack').hidden = !rec; $('#lockErase').hidden = setup;
   },
   say(m) { $('#lockMsg').textContent = m; },
   async submit(ev) {
     ev.preventDefault(); if (this.busy) return;
-    const p1 = $('#pw1').value, p2 = $('#pw2').value, btn = $('#lockBtn');
-    if (this.mode === 'setup') { if (p1.length < 8) return this.say('Use at least 8 characters.'); if (p1 !== p2) return this.say("The two passwords don't match."); }
-    else if (!p1) return;
+    const p1 = $('#pw1').value, p2 = $('#pw2').value, rk = $('#rk').value, btn = $('#lockBtn'), m = this.mode;
+    if (m === 'setup' || m === 'recover') {
+      if (m === 'recover' && !rkDecode(rk)) return this.say("That doesn't look like a recovery key. It has 26 letters and numbers.");
+      if (p1.length < 8) return this.say('Use at least 8 characters.');
+      if (p1 !== p2) return this.say("The two passwords don't match.");
+    } else if (!p1) return;
     this.busy = true; btn.disabled = true; this.say('One moment…');
     try {
-      if (this.mode === 'setup') await Vault.setup(p1);
-      else if (!(await Vault.unlock(p1))) { this.say('That password is not right.'); $('#pw1').select(); return; }
+      let code = null;
+      if (m === 'setup') code = await Vault.setup(p1);
+      else if (m === 'recover') { if (!(await Vault.recover(rk, p1))) { this.say('That recovery key is not right.'); return; } }
+      else {
+        const r = await Vault.unlock(p1);
+        if (!r) { this.say('That password is not right.'); $('#pw1').select(); return; }
+        code = r.recoveryKey || (Vault.needKey ? await Vault.newRecovery(p1) : null);
+      }
+      Vault.needKey = false;
       this.open();
+      if (code) showRecoveryKey(code);
     } catch (err) { this.say('Something went wrong: ' + (err.message || err.name)); }
     finally { this.busy = false; btn.disabled = false; }
   },
   open() {
-    this.locked = false; $('#pw1').value = ''; $('#pw2').value = ''; $('#lock').classList.remove('on');
+    this.locked = false; ['#pw1', '#pw2', '#rk'].forEach(i => { $(i).value = ''; }); $('#lock').classList.remove('on');
     if (S.view === 'entry' && !cur()) { S.view = 'cal'; S.openId = null; }
     render(); scrollTo(0, this.y || 0);
   },
@@ -774,9 +863,10 @@ const Lock = {
     this.locked = true;
     try { await flush(); } catch {}
     this.y = scrollY;
+    Vault.needKey = keyPending; keyPending = false; rkShown = '';
     urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
     S.entries = []; S.photos = []; S.select = null;
-    Vault.key = null; Vault.apiKey = '';
+    Vault.key = null; Vault.rec = null; Vault.apiKey = '';
     $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = '';
     this.setMode('unlock');
   },
