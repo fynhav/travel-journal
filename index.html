@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Travel Journal">
+<meta name="theme-color" content="#EFE2CB">
+<title>Travel Journal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--paper:#FBF6EC;--card:#FFFDF8;--ink:#2E2823;--muted:#8B7F70;--line:#E6DCCB;--band:#EFE2CB;--accent:#B5562F;--sel:#F6DECB;--danger:#A8402F}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
+body{padding-bottom:calc(env(safe-area-inset-bottom) + 28px)}
+button,input,textarea,select{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:20;background:var(--band);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top) + 20px) 14px 12px}
+.top .row{display:flex;align-items:center;gap:8px;min-height:42px;max-width:720px;margin:0 auto}
+.top h1{font:600 21px/1.2 "New York","Iowan Old Style",Georgia,serif;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sub{max-width:720px;margin:2px auto 0;color:var(--muted);font-size:14px}
+.ib{background:var(--card);border:1px solid var(--line);border-radius:12px;min-width:42px;height:42px;padding:0 12px;font-size:16px;cursor:pointer}
+.wrap{padding:12px 12px 0;max-width:720px;margin:0 auto}
+.wrap.padsel{padding-bottom:130px}
+.dow{display:grid;grid-template-columns:repeat(7,1fr);font-size:11px;color:var(--muted);text-align:center;padding:2px 0 6px;letter-spacing:.05em;text-transform:uppercase}
+.cal{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.week{position:relative;display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid var(--line)}
+.week:first-child{border-top:0}
+.cell{position:relative;height:90px;border:0;border-left:1px solid var(--line);background:transparent;padding:23px 5px 5px;text-align:left;display:flex;flex-direction:column;overflow:hidden;cursor:pointer;min-width:0}
+.cell:first-child{border-left:0}
+.num{font-size:12px;font-weight:600;line-height:18px;width:20px;height:18px;text-align:center;border-radius:9px;margin-left:-2px}
+.out .num{opacity:.38}
+.today .num{background:var(--accent);color:#fff}
+.loc{font-size:10.5px;line-height:1.25;margin-top:2px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;-webkit-hyphens:auto;hyphens:auto}
+.cell.sel{background:var(--sel)}
+.seg{position:absolute;top:3px;bottom:3px;border:2px solid var(--c);border-radius:14px;pointer-events:none}
+.seg.ol{border-left-style:dashed;border-top-left-radius:0;border-bottom-left-radius:0}
+.seg.or{border-right-style:dashed;border-top-right-radius:0;border-bottom-right-radius:0}
+.cb{margin:2px;height:16px;border-radius:10px;background:var(--t);font-size:10.5px;font-weight:700;padding:0 6px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#4A3A2C}
+.seg.ol .cb{border-top-left-radius:0;border-bottom-left-radius:0}
+.seg.or .cb{border-top-right-radius:0;border-bottom-right-radius:0}
+.hint{color:var(--muted);font-size:13px;margin:8px 2px}
+h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 10px}
+h3{font:600 19px/1.3 "New York","Iowan Old Style",Georgia,serif;margin:2px 0 6px}
+.sec{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:0 0 12px}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.item{display:flex;gap:10px;align-items:center;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;cursor:pointer;width:100%}
+.item .sw{width:8px;align-self:stretch;border-radius:4px;background:var(--c)}
+.item b{display:block;font-size:15px}
+.item small{color:var(--muted);font-size:13px}
+input,textarea,select{width:100%;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:16px;outline:none}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{min-height:84px;resize:none;line-height:1.45}
+input.title{font:600 19px/1.3 "New York","Iowan Old Style",Georgia,serif;background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:4px 2px 8px;margin-bottom:12px}
+label{display:block;font-size:13px;color:var(--muted)}
+label > input,label > select,label > textarea{margin-top:4px;color:var(--ink)}
+.dates{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.dates label{min-width:0}
+input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:block;min-height:44px}
+.chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:10px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--t);border:1.5px solid var(--c);border-radius:20px;padding:4px 4px 4px 12px;font-weight:600;font-size:15px}
+.chip button{border:0;background:transparent;width:26px;height:26px;border-radius:13px;font-size:17px;line-height:1;cursor:pointer;color:var(--muted)}
+.arrow{color:var(--muted);font-weight:700}
+.addrow{display:flex;gap:8px}
+.addrow input{flex:1}
+.dayrow{display:grid;grid-template-columns:92px 1fr;align-items:center;gap:8px;margin-bottom:8px;color:var(--ink);font-size:14px}
+.dayrow input{margin:0}
+.qa{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.qa:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.qh{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px}
+.q{flex:1;font:500 17px/1.35 "New York","Iowan Old Style",Georgia,serif}
+.qh input{flex:1}
+.x{border:0;background:transparent;color:var(--muted);font-size:20px;width:30px;height:30px;border-radius:15px;cursor:pointer;flex:none}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btns.end{margin:4px 0 20px}
+.stack{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:12px;padding:11px 14px;font-size:15px;cursor:pointer;text-align:center}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn.danger{color:var(--danger)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.small{padding:8px 12px;font-size:14px}
+.btn[disabled]{opacity:.55}
+.photos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ph{aspect-ratio:1;border-radius:10px;overflow:hidden;border:0;padding:0;background:var(--line);cursor:pointer;position:relative}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(46,40,35,.6));color:#fff;font-size:10.5px;padding:10px 6px 4px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.add-ph{display:flex;align-items:center;justify-content:center;flex-direction:column;background:var(--paper);border:1.5px dashed var(--line);color:var(--muted);font-size:13px}
+.add-ph span:first-child{font-size:26px;line-height:1}
+.banner{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 8px 8px 14px;margin-bottom:10px;font-size:14px}
+.selbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--band);border-top:1px solid var(--line);padding:12px 14px calc(env(safe-area-inset-bottom) + 12px)}
+.selbar > div{max-width:720px;margin:0 auto}
+.selbar .btns{margin-top:8px}
+.selbar .btn{flex:1}
+#sheet{position:fixed;inset:0;z-index:50;display:none}
+#sheet.on{display:block}
+#sheet .bg{position:absolute;inset:0;background:rgba(46,40,35,.35)}
+#sheet .body{position:absolute;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;background:var(--card);border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px)}
+#sheet .body > *{max-width:640px;margin-left:auto;margin-right:auto}
+#sheet label{margin-top:12px}
+img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;background:var(--paper);display:block}
+#toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(env(safe-area-inset-bottom) + 24px);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:90vw;text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<div id="sheet"><div class="bg" data-act="close-sheet"></div><div class="body"></div></div>
+<div id="toast"></div>
+<script>
+'use strict';
+// ---------- config ----------
+const MODEL = 'claude-haiku-5-5';
+const FIXED = [
+ "What's the first thing you remember about arriving here?",
+ "What did it smell, sound and taste like?",
+ "Who did you meet, and what were they like?",
+ "What surprised you?",
+ "What was the best thing you ate or drank?",
+ "What went wrong, and how did you handle it?",
+ "Describe the view you'd most want to remember.",
+ "What was the funniest moment?",
+ "How did you feel when you woke up, and when you went to bed?",
+ "What did you learn about this place, or about yourself?",
+ "What conversation stuck with you?",
+ "How did you get around, and what happened on the way?",
+ "What would you tell a friend coming here?",
+ "What small detail would nobody else have noticed?",
+ "What were you worried about, and did it happen?",
+ "What did you miss from home, if anything?",
+ "What made you laugh, or almost cry?",
+ "If this chapter had a title, what would it be?"
+];
+const COUNTRIES = ['Argentina','Belize','Bolivia','Brazil','Chile','Colombia','Costa Rica','Cuba','Ecuador','El Salvador','Guatemala','Honduras','Mexico','Nicaragua','Panama','Paraguay','Peru','Uruguay','Venezuela','United States','United Kingdom','Netherlands','Spain','Portugal','France','Italy','Greece','South Africa'];
+const TINTS = [['#F4DCC9','#C9784A'],['#DDE8D3','#6F9460'],['#D7E4EF','#5E86A8'],['#F3E4BC','#B8912F'],['#EAD9E7','#9A6A92'],['#D6E8E4','#4F8C80'],['#F2D6D1','#B5615A']];
+const CHAPTER_PROMPT = n => `Instructions for Claude
+I'm writing a travel memoir one chapter at a time, to turn into a book. Below are my raw journal notes for Chapter ${n} (mostly dictated, so expect typos), and the photos are attached.
+
+Please write this chapter:
+- First person, past tense, in my own voice; keep my phrasing where it's good.
+- Stay true to my notes. Don't invent events, people or facts; if something would help the story, ask me instead.
+- Open with a scene rather than a summary, and use the places and dates to anchor the reader.
+- Place each photo where it fits, marked as [Photo: filename] with a one-line caption.
+- Length to suit the material, roughly 1,200 to 2,500 words.
+- Finish with a few questions whose answers would make the chapter richer.`;
+const BOOK_PROMPT = `Instructions for Claude
+journal.md holds my raw travel journal, split into chapters (mostly dictated, so expect typos). The photos folder has the pictures referenced in each chapter.
+
+I'd like to turn this into a travel memoir, written chapter by chapter:
+- Start with Chapter 1 only, then stop and wait for my feedback before writing the next one.
+- First person, past tense, in my own voice; keep my phrasing where it's good.
+- Stay true to my notes. Don't invent events, people or facts; ask me when something's missing.
+- Open each chapter with a scene, anchor it with the places and dates, and keep threads running between chapters.
+- Place photos where they fit, marked as [Photo: filename] with a one-line caption.
+- After each chapter, list a few questions that would make it richer.`;
+
+// ---------- helpers ----------
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const pad2 = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 864e5);
+const range = (a, b) => { const out = []; for (let s = a; s <= b; s = addDays(s, 1)) out.push(s); return out; };
+const fmt = (s, o) => parse(s).toLocaleDateString('en-GB', o);
+const SHORT = { weekday: 'short', day: 'numeric', month: 'short' };
+const LONG = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+function rangeLabel(a, b) {
+  const A = parse(a), B = parse(b);
+  if (a === b) return fmt(a, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  if (A.getFullYear() === B.getFullYear() && A.getMonth() === B.getMonth()) return `${A.getDate()}–${fmt(b, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  if (A.getFullYear() === B.getFullYear()) return `${fmt(a, { day: 'numeric', month: 'short' })} – ${fmt(b, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+  return `${fmt(a, { day: 'numeric', month: 'short', year: 'numeric' })} – ${fmt(b, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+function tint(name) { let h = 0; for (const ch of (name || '').toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return TINTS[h % TINTS.length]; }
+function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2800); }
+function autosize(t) { t.style.height = 'auto'; t.style.height = Math.max(84, t.scrollHeight + 2) + 'px'; }
+const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
+function downloadBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+async function shareOrDownload(files, title) {
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.share({ files, title }); return true; }
+    catch (err) { if (err.name === 'AbortError') return false; }
+  }
+  files.forEach(f => downloadBlob(f, f.name));
+  return true;
+}
+
+// ---------- storage ----------
+const DB = {
+  db: null,
+  open() { return new Promise((res, rej) => { const r = indexedDB.open('travel-journal', 1); r.onupgradeneeded = () => { const d = r.result; d.createObjectStore('entries', { keyPath: 'id' }); d.createObjectStore('photos', { keyPath: 'id' }); }; r.onsuccess = () => { this.db = r.result; res(); }; r.onerror = () => rej(r.error); }); },
+  req(store, mode, fn) { return new Promise((res, rej) => { const q = fn(this.db.transaction(store, mode).objectStore(store)); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
+  all(s) { return this.req(s, 'readonly', o => o.getAll()); },
+  put(s, v) { return this.req(s, 'readwrite', o => o.put(v)); },
+  del(s, k) { return this.req(s, 'readwrite', o => o.delete(k)); },
+  clear(s) { return this.req(s, 'readwrite', o => o.clear()); }
+};
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+// ---------- state ----------
+const S = { entries: [], photos: [], view: 'cal', month: null, openId: null, select: null };
+const urls = new Map();
+const purl = p => { if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); };
+const cur = () => S.entries.find(x => x.id === S.openId);
+const entryOn = d => S.entries.find(e => e.start <= d && d <= e.end);
+const overlaps = (a, b, except) => S.entries.some(x => x.id !== except && x.start <= b && a <= x.end);
+const chapters = () => [...S.entries].sort((a, b) => a.start < b.start ? -1 : 1);
+const chapterNo = e => chapters().indexOf(e) + 1;
+const countryLabel = e => e.countries.join(' → ');
+const photosOf = e => S.photos.filter(p => p.entryId === e.id).sort((a, b) => a.day === b.day ? a.added - b.added : (a.day < b.day ? -1 : 1));
+const photoName = (n, j, p) => `ch${pad2(n)}-${pad2(j + 1)}-${p.day}.jpg`;
+function pickFixed(n, used) { const pool = FIXED.filter(q => !used.includes(q)); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } return pool.slice(0, n); }
+
+const timers = new Map();
+function sched(key, fn) { clearTimeout(timers.get(key)?.t); timers.set(key, { fn, t: setTimeout(() => { timers.delete(key); fn(); }, 400) }); }
+function flush() { for (const [k, v] of timers) { clearTimeout(v.t); v.fn(); } timers.clear(); }
+const saveEntry = e => { e.updated = Date.now(); return DB.put('entries', e); };
+const schedEntry = e => sched('e' + e.id, () => saveEntry(e));
+const schedPhoto = p => sched('p' + p.id, () => DB.put('photos', p));
+
+// ---------- views ----------
+function render() {
+  $('#app').innerHTML = S.view === 'cal' ? calHTML() : entryHTML(cur());
+  $$('textarea').forEach(autosize);
+}
+function rerender() { const y = scrollY; render(); scrollTo(0, y); }
+
+function calHTML() {
+  const y = S.month.getFullYear(), mo = S.month.getMonth();
+  const first = new Date(y, mo, 1), off = (first.getDay() + 6) % 7;
+  const last = new Date(y, mo + 1, 0);
+  const gStart = iso(new Date(y, mo, 1 - off));
+  const gEnd = iso(new Date(y, mo, last.getDate() + (6 - (last.getDay() + 6) % 7)));
+  const today = iso(new Date());
+  const sel = S.select ? [S.select.a, S.select.b].sort() : null;
+  let weeks = '';
+  for (let ws = gStart; ws <= gEnd; ws = addDays(ws, 7)) {
+    const we = addDays(ws, 6);
+    let cells = '', segs = '';
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(ws, i), dt = parse(d), e = entryOn(d), loc = e ? (e.days[d] || '') : '';
+      const cls = ['cell'];
+      if (dt.getMonth() !== mo) cls.push('out');
+      if (d === today) cls.push('today');
+      if (sel && d >= sel[0] && d <= sel[1]) cls.push('sel');
+      cells += `<button class="${cls.join(' ')}" data-act="day" data-d="${d}"><span class="num">${dt.getDate()}</span>${loc ? `<span class="loc">${esc(loc)}</span>` : ''}</button>`;
+    }
+    for (const e of S.entries) {
+      if (e.end < ws || e.start > we) continue;
+      const s = e.start > ws ? e.start : ws, t = e.end < we ? e.end : we;
+      const c0 = daysBetween(ws, s), span = daysBetween(s, t) + 1;
+      const oL = e.start < ws, oR = e.end > we, pl = oL ? 0 : 3, pr = oR ? 0 : 3;
+      const [tn, bd] = tint(e.countries[0] || e.title);
+      const label = countryLabel(e) || e.title || '+ country';
+      segs += `<div class="seg${oL ? ' ol' : ''}${oR ? ' or' : ''}" style="left:calc(${c0} * 100% / 7 + ${pl}px);width:calc(${span} * 100% / 7 - ${pl + pr}px);--c:${bd};--t:${tn}"><div class="cb">${oL ? '… ' : ''}${esc(label)}</div></div>`;
+    }
+    weeks += `<div class="week">${cells}${segs}</div>`;
+  }
+  const inMonth = chapters().filter(e => e.end >= iso(first) && e.start <= iso(last));
+  const lastB = +lsGet('tj.lastBackup') || 0;
+  const needBackup = S.entries.length && Date.now() - lastB > 5 * 864e5;
+  let selbar = '';
+  if (sel) {
+    const n = daysBetween(sel[0], sel[1]) + 1;
+    selbar = `<div class="selbar"><div><b>${n} day${n > 1 ? 's' : ''}</b> · ${rangeLabel(sel[0], sel[1])}<div class="hint" style="margin:2px 0 0">Tap another day to set where the chapter starts or ends.</div><div class="btns"><button class="btn" data-act="sel-cancel">Cancel</button><button class="btn pri" data-act="sel-ok">Start writing</button></div></div></div>`;
+  }
+  return `<header class="top"><div class="row"><h1>${S.month.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</h1><button class="ib" data-act="prev" aria-label="Previous month">‹</button><button class="ib" data-act="today">Today</button><button class="ib" data-act="next" aria-label="Next month">›</button><button class="ib" data-act="settings" aria-label="Settings">⚙︎</button></div></header>
+  <div class="wrap${sel ? ' padsel' : ''}">
+    ${needBackup ? `<div class="banner"><span>${lastB ? 'Last iCloud backup ' + Math.floor((Date.now() - lastB) / 864e5) + ' days ago' : 'Not backed up to iCloud yet'}</span><button class="btn small pri" data-act="backup">Back up</button></div>` : ''}
+    <div class="dow"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+    <div class="cal">${weeks}</div>
+    ${S.entries.length ? '' : '<p class="hint">Tap any day to start a chapter. You can go back to earlier days to catch up.</p>'}
+    ${inMonth.length ? `<div class="list">${inMonth.map(e => {
+      const places = [...new Set(range(e.start, e.end).map(d => e.days[d]).filter(Boolean))];
+      const np = photosOf(e).length, na = e.qa.filter(x => x.a.trim()).length;
+      return `<button class="item" data-act="open" data-id="${e.id}" style="--c:${tint(e.countries[0] || e.title)[1]}"><span class="sw"></span><span><b>Chapter ${chapterNo(e)}${e.title ? ': ' + esc(e.title) : ''}</b><small>${esc(countryLabel(e) || 'No country yet')} · ${rangeLabel(e.start, e.end)}${places.length ? ' · ' + esc(places.join(', ')) : ''}<br>${na} answer${na === 1 ? '' : 's'} · ${np} photo${np === 1 ? '' : 's'}</small></span></button>`;
+    }).join('')}</div>` : ''}
+  </div>${selbar}`;
+}
+
+function entryHTML(e) {
+  const days = range(e.start, e.end), ps = photosOf(e);
+  const places = [...new Set(S.entries.flatMap(x => Object.values(x.days)).filter(Boolean))];
+  const chips = e.countries.map((c, i) => { const [tn, bd] = tint(c); return `${i ? '<span class="arrow">→</span>' : ''}<span class="chip" style="--t:${tn};--c:${bd}">${esc(c)}<button data-act="rm-country" data-i="${i}" aria-label="Remove">×</button></span>`; }).join('');
+  const qa = e.qa.map((x, i) => `<div class="qa"><div class="qh">${x.kind === 'own'
+      ? `<input data-field="qq" data-i="${i}" value="${esc(x.q)}" placeholder="Your own heading">`
+      : `<div class="q">${x.kind === 'smart' ? '✨ ' : ''}${esc(x.q)}</div>`}<button class="x" data-act="rm-q" data-i="${i}" aria-label="Remove question">×</button></div><textarea data-field="qa" data-i="${i}" placeholder="Tap the mic on your keyboard and talk…">${esc(x.a)}</textarea></div>`).join('');
+  return `<header class="top"><div class="row"><button class="ib" data-act="back">‹ Calendar</button><h1>Chapter ${chapterNo(e)}</h1></div><div class="sub">${rangeLabel(e.start, e.end)} · ${days.length} day${days.length > 1 ? 's' : ''}${e.countries.length ? ' · ' + esc(countryLabel(e)) : ''}</div></header>
+  <div class="wrap">
+    <section class="sec"><input class="title" data-field="title" placeholder="Chapter title (optional)" value="${esc(e.title)}">
+      <div class="dates"><label>From<input type="date" data-change="start" value="${e.start}"></label><label>To<input type="date" data-change="end" value="${e.end}"></label></div></section>
+    <section class="sec"><h2>Countries</h2>${chips ? `<div class="chips">${chips}</div>` : ''}
+      <div class="addrow"><input id="countryIn" list="countryList" placeholder="${e.countries.length ? 'Crossed into another country?' : 'Add a country'}" enterkeyhint="done" autocomplete="off"><button class="btn" data-act="add-country">Add</button></div>
+      <datalist id="countryList">${COUNTRIES.map(c => `<option value="${c}">`).join('')}</datalist></section>
+    <section class="sec"><h2>Where you were</h2>
+      ${days.map(d => `<label class="dayrow"><span>${fmt(d, SHORT)}</span><input data-field="day" data-d="${d}" list="placeList" value="${esc(e.days[d] || '')}" placeholder="Town or place" autocomplete="off"></label>`).join('')}
+      ${days.length > 1 ? `<button class="btn small" data-act="fill-days">Use the first day's place for every day</button>` : ''}
+      <datalist id="placeList">${places.map(p => `<option value="${esc(p)}">`).join('')}</datalist></section>
+    <section class="sec"><h2>Questions</h2>${qa || '<p class="hint" style="margin-top:0">No questions yet.</p>'}
+      <div class="btns"><button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q">✨ Smart questions</button><button class="btn" data-act="own-q">+ My own</button></div></section>
+    <section class="sec"><h2>Photos</h2><div class="photos">
+      ${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}
+      <label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*" multiple data-change="photos" hidden></label></div></section>
+    <section class="sec"><h2>Anything else</h2><textarea data-field="notes" placeholder="Free notes…">${esc(e.notes)}</textarea></section>
+    <div class="btns end"><button class="btn pri" data-act="share">Send chapter to Claude</button><button class="btn danger" data-act="del-entry">Delete chapter</button></div>
+  </div>`;
+}
+
+// ---------- sheet ----------
+function openSheet(html) { $('#sheet .body').innerHTML = html; $('#sheet').classList.add('on'); $$('#sheet textarea').forEach(autosize); }
+function closeSheet() { flush(); $('#sheet').classList.remove('on'); if (S.view === 'entry') rerender(); }
+
+function openSettings() {
+  const lastB = +lsGet('tj.lastBackup') || 0;
+  openSheet(`<h3>Settings</h3>
+    <label>Anthropic API key (for ✨ smart questions)<input type="password" data-field="key" value="${esc(lsGet('tj.key') || '')}" placeholder="sk-ant-…" autocomplete="off"></label>
+    <p class="hint">Kept only on this phone. Without a key you still get the fixed questions.</p>
+    <h2 style="margin-top:18px">iCloud backup</h2>
+    <p class="hint" style="margin-top:0">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive.</p>
+    <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" accept="application/json,.json" data-change="restore" hidden></label></div>
+    <h2 style="margin-top:18px">The book</h2>
+    <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip.</p>
+    <div class="btns"><button class="btn" data-act="export-book">Export whole book</button></div>
+    <div class="stack"><button class="btn ghost" data-act="close-sheet">Close</button></div>`);
+}
+
+function openPhoto(id) {
+  const p = S.photos.find(x => x.id === id), e = cur();
+  const days = range(e.start, e.end);
+  if (!days.includes(p.day)) days.unshift(p.day);
+  openSheet(`<img class="big" src="${purl(p)}" alt="">
+    <label>Caption<textarea data-field="pcap" data-id="${id}" placeholder="What's happening here?">${esc(p.caption)}</textarea></label>
+    <label>Day<select data-change="pday" data-id="${id}">${days.map(d => `<option value="${d}"${d === p.day ? ' selected' : ''}>${fmt(d, SHORT)}</option>`).join('')}</select></label>
+    <label>Place, if different from that day<input data-field="pplace" data-id="${id}" value="${esc(p.place)}" placeholder="${esc(e.days[p.day] || 'Same as the day')}" autocomplete="off"></label>
+    <div class="btns"><button class="btn pri" data-act="close-sheet" style="flex:1">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete photo</button></div>`);
+}
+
+// ---------- actions ----------
+async function createEntry(a, b) {
+  const prev = chapters().filter(x => x.end < a).pop();
+  const e = { id: uid(), start: a, end: b, title: '', countries: prev && prev.countries.length ? [prev.countries[prev.countries.length - 1]] : [], days: {}, qa: pickFixed(3, []).map(q => ({ q, a: '', kind: 'fixed' })), notes: '', created: Date.now(), updated: Date.now() };
+  S.entries.push(e); await saveEntry(e);
+  openEntry(e.id);
+}
+function openEntry(id) { S.openId = id; S.view = 'entry'; S.select = null; render(); scrollTo(0, 0); }
+
+async function compress(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
+  } finally { URL.revokeObjectURL(url); }
+}
+async function addPhotos(files, e) {
+  toast(`Adding ${files.length} photo${files.length > 1 ? 's' : ''}…`);
+  let bad = 0;
+  for (const f of files) {
+    try {
+      const blob = await compress(f);
+      let day = f.lastModified ? iso(new Date(f.lastModified)) : e.start;
+      if (day < e.start || day > e.end) day = e.start;
+      const p = { id: uid(), entryId: e.id, blob, caption: '', day, place: '', added: Date.now() };
+      await DB.put('photos', p); S.photos.push(p);
+    } catch { bad++; }
+  }
+  rerender();
+  toast(bad ? `${bad} photo${bad > 1 ? 's' : ''} couldn't be read` : 'Photos added');
+}
+
+async function smartQuestions(e, btn) {
+  const key = lsGet('tj.key');
+  if (!key) { openSettings(); toast('Add your Anthropic API key first'); return; }
+  if (!navigator.onLine) { addFixed(e, 2); toast('No signal, so here are two fixed questions'); return; }
+  btn.disabled = true; btn.textContent = 'Thinking…';
+  const days = range(e.start, e.end);
+  const ctx = [
+    `Dates: ${rangeLabel(e.start, e.end)} (${days.length} days)`,
+    `Countries: ${countryLabel(e) || 'not set'}`,
+    `Places by day: ${days.map(d => `${fmt(d, SHORT)}: ${e.days[d] || '?'}`).join('; ')}`,
+    ...e.qa.filter(x => x.a.trim()).map(x => `Q: ${x.q}\nA: ${x.a.trim()}`),
+    e.notes.trim() ? `Notes: ${e.notes.trim()}` : '',
+    ...photosOf(e).filter(p => p.caption).map(p => `Photo: ${p.caption}`)
+  ].filter(Boolean).join('\n');
+  const asked = e.qa.map(x => x.q).filter(Boolean).join('\n');
+  try {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 600, messages: [{ role: 'user', content:
+        `I'm keeping a travel journal that will become a chapter-by-chapter memoir. Here's what I have for this chapter so far:\n\n${ctx}\n\nQuestions already asked:\n${asked || '(none)'}\n\nAsk me 3 short, specific questions about this place and what I've written that would draw out vivid memories: sensory detail, people, moments, feelings. Don't repeat anything already asked. Reply with only a JSON array of 3 strings.` }] })
+    });
+    if (!r.ok) throw new Error(r.status === 401 ? 'That API key was rejected' : 'Claude returned an error (' + r.status + ')');
+    const data = await r.json();
+    const text = (data.content || []).map(c => c.text || '').join('');
+    const qs = JSON.parse(text.match(/\[[\s\S]*\]/)[0]).filter(q => typeof q === 'string' && q.trim()).slice(0, 3);
+    if (!qs.length) throw new Error('No questions came back');
+    qs.forEach(q => e.qa.push({ q: q.trim(), a: '', kind: 'smart' }));
+    await saveEntry(e); rerender();
+  } catch (err) {
+    btn.disabled = false; btn.textContent = '✨ Smart questions';
+    toast(err.message && !err.message.includes('JSON') ? err.message : "Couldn't get smart questions right now");
+  }
+}
+function addFixed(e, n) {
+  const qs = pickFixed(n, e.qa.map(x => x.q));
+  if (!qs.length) { toast("You've used every fixed question. Try ✨ or your own"); return false; }
+  qs.forEach(q => e.qa.push({ q, a: '', kind: 'fixed' }));
+  saveEntry(e); rerender(); return true;
+}
+
+function chapterMd(e, n, ps, names) {
+  const L = [`# Chapter ${n}${e.title ? ': ' + e.title : ''}`, ''];
+  const days = range(e.start, e.end);
+  L.push(`- **Dates:** ${rangeLabel(e.start, e.end)} (${days.length} day${days.length > 1 ? 's' : ''})`);
+  if (e.countries.length) L.push(`- **Country:** ${countryLabel(e)}`);
+  L.push('', '## Where I was', ...days.map(d => `- ${fmt(d, LONG)}: ${e.days[d] || '(not noted)'}`));
+  const ans = e.qa.filter(x => x.a.trim());
+  if (ans.length) { L.push('', '## My notes'); ans.forEach(x => L.push('', `**${x.q || 'Note'}**`, '', x.a.trim())); }
+  if (e.notes.trim()) L.push('', '## Other notes', '', e.notes.trim());
+  if (ps.length) { L.push('', '## Photos'); ps.forEach((p, i) => { const place = p.place || e.days[p.day] || ''; L.push(`- ${names[i]}: ${fmt(p.day, SHORT)}${place ? ', ' + place : ''}${p.caption ? '. ' + p.caption : ''}`); }); }
+  return L.join('\n');
+}
+async function shareChapter(e) {
+  flush();
+  const n = chapterNo(e), ps = photosOf(e), names = ps.map((p, j) => photoName(n, j, p));
+  const md = CHAPTER_PROMPT(n) + '\n\n---\n\n' + chapterMd(e, n, ps, names);
+  const files = [new File([md], `chapter-${pad2(n)}.md`, { type: 'text/plain' }), ...ps.map((p, j) => new File([p.blob], names[j], { type: 'image/jpeg' }))];
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.share({ files, title: `Chapter ${n}` }); } catch (err) { if (err.name !== 'AbortError') toast("Couldn't open the share sheet"); }
+    return;
+  }
+  if (window.JSZip) {
+    const zip = new JSZip(); zip.file(files[0].name, md); files.slice(1).forEach(f => zip.file('photos/' + f.name, f));
+    downloadBlob(await zip.generateAsync({ type: 'blob' }), `chapter-${pad2(n)}.zip`);
+  } else downloadBlob(files[0], files[0].name);
+}
+async function exportBook() {
+  flush();
+  if (!S.entries.length) { toast('No chapters yet'); return; }
+  if (!window.JSZip) { toast('Needs a connection to build the zip'); return; }
+  const zip = new JSZip(); let book = '# My travel journal\n\n';
+  chapters().forEach((e, i) => {
+    const n = i + 1, ps = photosOf(e), names = ps.map((p, j) => photoName(n, j, p));
+    book += chapterMd(e, n, ps, names) + '\n\n---\n\n';
+    ps.forEach((p, j) => zip.file('photos/' + names[j], p.blob));
+  });
+  zip.file('PROMPT.md', BOOK_PROMPT); zip.file('journal.md', book);
+  const blob = await zip.generateAsync({ type: 'blob' });
+  await shareOrDownload([new File([blob], `travel-journal-book-${iso(new Date())}.zip`, { type: 'application/zip' })], 'Travel journal');
+}
+async function backup() {
+  flush();
+  toast('Preparing backup…');
+  const photos = await Promise.all(S.photos.map(async ({ blob, ...rest }) => ({ ...rest, data: await blobToDataURL(blob) })));
+  const json = JSON.stringify({ app: 'travel-journal', v: 1, at: new Date().toISOString(), entries: S.entries, photos });
+  const done = await shareOrDownload([new File([json], `travel-journal-backup-${iso(new Date())}.json`, { type: 'application/json' })], 'Travel journal backup');
+  if (done) { lsSet('tj.lastBackup', String(Date.now())); if ($('#sheet').classList.contains('on')) openSettings(); else rerender(); }
+}
+async function restore(file) {
+  let d;
+  try { d = JSON.parse(await file.text()); if (d.app !== 'travel-journal' || !Array.isArray(d.entries)) throw 0; }
+  catch { toast("That doesn't look like a Travel Journal backup"); return; }
+  if (!confirm(`Replace everything on this phone with the backup from ${new Date(d.at).toLocaleDateString('en-GB')}? (${d.entries.length} chapters, ${d.photos.length} photos)`)) return;
+  await DB.clear('entries'); await DB.clear('photos');
+  for (const e of d.entries) await DB.put('entries', e);
+  for (const { data, ...rest } of d.photos) await DB.put('photos', { ...rest, blob: await (await fetch(data)).blob() });
+  urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
+  await load(); S.view = 'cal'; $('#sheet').classList.remove('on'); render(); toast('Restored');
+}
+function addCountry() {
+  const inp = $('#countryIn'), v = inp && inp.value.trim(); if (!v) return;
+  const e = cur(); e.countries.push(v); saveEntry(e); rerender();
+}
+
+// ---------- events ----------
+document.addEventListener('click', async ev => {
+  const t = ev.target.closest('[data-act]'); if (!t) return;
+  const act = t.dataset.act, e = cur();
+  switch (act) {
+    case 'prev': S.month = new Date(S.month.getFullYear(), S.month.getMonth() - 1, 1); render(); break;
+    case 'next': S.month = new Date(S.month.getFullYear(), S.month.getMonth() + 1, 1); render(); break;
+    case 'today': { const n = new Date(); S.month = new Date(n.getFullYear(), n.getMonth(), 1); render(); break; }
+    case 'settings': openSettings(); break;
+    case 'close-sheet': closeSheet(); break;
+    case 'day': {
+      const d = t.dataset.d;
+      if (S.select) {
+        const [a, b] = [S.select.a, d].sort();
+        if (overlaps(a, b)) { toast('That would overlap another chapter'); break; }
+        S.select.b = d; rerender(); break;
+      }
+      const ex = entryOn(d); if (ex) { openEntry(ex.id); break; }
+      openSheet(`<h3>${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}</h3><p class="hint">Start a new chapter here. Does it cover just this day, or a few?</p><div class="stack"><button class="btn pri" data-act="new-single" data-d="${d}">Just this day</button><button class="btn" data-act="new-range" data-d="${d}">Include other days…</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`);
+      break;
+    }
+    case 'new-single': $('#sheet').classList.remove('on'); createEntry(t.dataset.d, t.dataset.d); break;
+    case 'new-range': $('#sheet').classList.remove('on'); S.select = { a: t.dataset.d, b: t.dataset.d }; rerender(); break;
+    case 'sel-cancel': S.select = null; rerender(); break;
+    case 'sel-ok': { const [a, b] = [S.select.a, S.select.b].sort(); createEntry(a, b); break; }
+    case 'open': openEntry(t.dataset.id); break;
+    case 'back': flush(); S.view = 'cal'; S.openId = null; render(); scrollTo(0, 0); break;
+    case 'add-country': addCountry(); break;
+    case 'rm-country': e.countries.splice(+t.dataset.i, 1); saveEntry(e); rerender(); break;
+    case 'fill-days': { const f = e.days[e.start]; if (!f) { toast("Add the first day's place first"); break; } range(e.start, e.end).forEach(d => e.days[d] = f); saveEntry(e); rerender(); break; }
+    case 'more-q': if (addFixed(e, 1)) { const ts = $$('textarea[data-field="qa"]'); ts[ts.length - 1]?.focus(); } break;
+    case 'own-q': { e.qa.push({ q: '', a: '', kind: 'own' }); saveEntry(e); rerender(); const ins = $$('input[data-field="qq"]'); ins[ins.length - 1]?.focus(); break; }
+    case 'smart-q': smartQuestions(e, t); break;
+    case 'rm-q': { const x = e.qa[+t.dataset.i]; if (x.a.trim() && !confirm('Remove this question and your answer?')) break; e.qa.splice(+t.dataset.i, 1); saveEntry(e); rerender(); break; }
+    case 'photo': openPhoto(t.dataset.id); break;
+    case 'del-photo': {
+      if (!confirm('Delete this photo from the journal?')) break;
+      const id = t.dataset.id; timers.delete('p' + id);
+      await DB.del('photos', id); S.photos = S.photos.filter(p => p.id !== id);
+      if (urls.has(id)) { URL.revokeObjectURL(urls.get(id)); urls.delete(id); }
+      closeSheet(); break;
+    }
+    case 'del-entry': {
+      if (!confirm(`Delete Chapter ${chapterNo(e)} and its photos? This can't be undone.`)) break;
+      timers.delete('e' + e.id);
+      for (const p of photosOf(e)) { await DB.del('photos', p.id); }
+      S.photos = S.photos.filter(p => p.entryId !== e.id);
+      await DB.del('entries', e.id); S.entries = S.entries.filter(x => x.id !== e.id);
+      S.view = 'cal'; S.openId = null; render(); break;
+    }
+    case 'share': shareChapter(e); break;
+    case 'export-book': exportBook(); break;
+    case 'backup': backup(); break;
+  }
+});
+document.addEventListener('input', ev => {
+  const t = ev.target, f = t.dataset.field; if (!f) return;
+  const e = cur(), v = t.value;
+  if (t.tagName === 'TEXTAREA') autosize(t);
+  if (f === 'key') { lsSet('tj.key', v.trim()); return; }
+  if (f === 'pcap' || f === 'pplace') { const p = S.photos.find(x => x.id === t.dataset.id); p[f === 'pcap' ? 'caption' : 'place'] = v; schedPhoto(p); return; }
+  if (!e) return;
+  if (f === 'title') e.title = v;
+  else if (f === 'day') e.days[t.dataset.d] = v;
+  else if (f === 'qa') e.qa[+t.dataset.i].a = v;
+  else if (f === 'qq') e.qa[+t.dataset.i].q = v;
+  else if (f === 'notes') e.notes = v;
+  schedEntry(e);
+});
+document.addEventListener('change', async ev => {
+  const t = ev.target, f = t.dataset.change; if (!f) return;
+  const e = cur();
+  if (f === 'start' || f === 'end') {
+    if (!t.value) { rerender(); return; }
+    let s = f === 'start' ? t.value : e.start, en = f === 'end' ? t.value : e.end;
+    if (s > en) { if (f === 'start') en = s; else s = en; }
+    if (overlaps(s, en, e.id)) { toast('Those dates overlap another chapter'); rerender(); return; }
+    e.start = s; e.end = en; await saveEntry(e); rerender();
+  } else if (f === 'photos') {
+    const files = [...t.files]; t.value = ''; if (files.length) addPhotos(files, e);
+  } else if (f === 'pday') {
+    const p = S.photos.find(x => x.id === t.dataset.id); p.day = t.value; await DB.put('photos', p);
+    const pl = $('#sheet input[data-field="pplace"]'); if (pl) pl.placeholder = e.days[p.day] || 'Same as the day';
+  } else if (f === 'restore') {
+    const file = t.files[0]; t.value = ''; if (file) restore(file);
+  }
+});
+document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } });
+window.addEventListener('pagehide', flush);
+document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+
+// ---------- start ----------
+async function load() {
+  S.entries = await DB.all('entries'); S.photos = await DB.all('photos');
+  for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; }
+}
+(async () => {
+  const n = new Date(); S.month = new Date(n.getFullYear(), n.getMonth(), 1);
+  try { await DB.open(); navigator.storage?.persist?.(); await load(); }
+  catch { toast("Storage isn't available in this browser mode"); }
+  render();
+})();
+</script>
+</body>
+</html>
