@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-title" content="Travel Journal">
 <meta name="theme-color" content="#EFE2CB">
 <title>Travel Journal</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{--paper:#FBF6EC;--card:#FFFDF8;--ink:#2E2823;--muted:#8B7F70;--line:#E6DCCB;--band:#EFE2CB;--accent:#B5562F;--sel:#F6DECB;--danger:#A8402F}
@@ -99,6 +102,13 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 #sheet .body > *{max-width:640px;margin-left:auto;margin-right:auto}
 #sheet label{margin-top:12px}
 img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;background:var(--paper);display:block}
+#lock{position:fixed;inset:0;z-index:100;background:var(--paper);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
+#lock.on{display:flex}
+#lock::before{content:"";position:absolute;top:0;left:0;right:0;height:calc(env(safe-area-inset-top) + 20px);background:var(--band);border-bottom:1px solid var(--line)}
+#lock img{width:96px;height:96px;border-radius:22px;box-shadow:0 2px 10px rgba(46,40,35,.18)}
+#lock h1{font:600 24px/1.2 "New York","Iowan Old Style",Georgia,serif;margin:16px 0 4px}
+#lock p{color:var(--muted);margin:0 0 20px;min-height:22px;font-size:14px;max-width:280px}
+#lock .btn{min-width:230px;margin-bottom:6px}
 #toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(env(safe-area-inset-bottom) + 24px);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:90vw;text-align:center}
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -106,6 +116,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;backgro
 <body>
 <main id="app"></main>
 <div id="sheet"><div class="bg" data-act="close-sheet"></div><div class="body"></div></div>
+<div id="lock" class="on"><img src="icon-192.png" alt=""><h1>Travel Journal</h1><p id="lockMsg">Locked</p><button class="btn pri" id="lockBtn" data-act="unlock">Unlock with Face ID</button><button class="btn ghost small" id="lockReset" data-act="lock-reset" hidden>Trouble unlocking? Set up again</button></div>
 <div id="toast"></div>
 <script>
 'use strict';
@@ -320,6 +331,9 @@ function openSettings() {
   openSheet(`<h3>Settings</h3>
     <label>Anthropic API key (for ✨ smart questions)<input type="password" data-field="key" value="${esc(lsGet('tj.key') || '')}" placeholder="sk-ant-…" autocomplete="off"></label>
     <p class="hint">Kept only on this phone. Without a key you still get the fixed questions.</p>
+    <h2 style="margin-top:18px">Privacy lock</h2>
+    <p class="hint" style="margin-top:0">${Lock.supported ? 'Face ID (or your passcode) opens the journal, and is asked for again after the app has been away for a minute.' : "This device can't offer Face ID or a screen-lock check, so the journal can't lock itself."}</p>
+    ${Lock.supported ? '<div class="btns"><button class="btn" data-act="lock-now">Lock now</button></div>' : ''}
     <h2 style="margin-top:18px">iCloud backup</h2>
     <p class="hint" style="margin-top:0">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive.</p>
     <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" accept="application/json,.json" data-change="restore" hidden></label></div>
@@ -535,6 +549,9 @@ document.addEventListener('click', async ev => {
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
+    case 'unlock': Lock.unlock(); break;
+    case 'lock-reset': Lock.reset(); break;
+    case 'lock-now': Lock.lock(); break;
   }
 });
 document.addEventListener('input', ev => {
@@ -571,7 +588,55 @@ document.addEventListener('change', async ev => {
 });
 document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } });
 window.addEventListener('pagehide', flush);
-document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { flush(); Lock.hiddenAt = Date.now(); }
+  else if (Lock.supported && !Lock.locked && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
+});
+
+// ---------- lock (Face ID via passkey, checked on this phone only) ----------
+const Lock = {
+  KEY: 'tj.cred', supported: false, locked: true, busy: false, hiddenAt: 0,
+  enc: b => btoa(String.fromCharCode(...new Uint8Array(b))),
+  dec: t => Uint8Array.from(atob(t), c => c.charCodeAt(0)),
+  async init() {
+    try { this.supported = !!(window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); } catch { this.supported = false; }
+    this.locked = this.supported;
+    if (!this.supported) $('#lock').classList.remove('on');
+    else this.show();
+  },
+  show(msg) {
+    const has = !!lsGet(this.KEY);
+    $('#lock').classList.add('on');
+    $('#lockBtn').textContent = has ? 'Unlock with Face ID' : 'Set up Face ID lock';
+    $('#lockMsg').textContent = msg || (has ? 'Locked' : 'First time here: set up Face ID so only you can open your journal.');
+    $('#lockReset').hidden = !has;
+  },
+  lock() {
+    if (!this.supported || this.locked) return;
+    flush(); this.locked = true; this.y = scrollY;
+    $('#sheet').classList.remove('on'); $('#app').innerHTML = '';
+    this.show();
+  },
+  open() {
+    this.locked = false; $('#lock').classList.remove('on'); render(); scrollTo(0, this.y || 0);
+  },
+  async unlock(auto) {
+    if (this.busy) return; this.busy = true;
+    try {
+      const id = lsGet(this.KEY), challenge = crypto.getRandomValues(new Uint8Array(32));
+      if (id) {
+        await navigator.credentials.get({ publicKey: { challenge, rpId: location.hostname, allowCredentials: [{ type: 'public-key', id: this.dec(id) }], userVerification: 'required', timeout: 60000 } });
+      } else {
+        const cred = await navigator.credentials.create({ publicKey: { challenge, rp: { name: 'Travel Journal', id: location.hostname }, user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'journal', displayName: 'Travel Journal' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }], authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' }, attestation: 'none', timeout: 60000 } });
+        lsSet(this.KEY, this.enc(cred.rawId));
+      }
+      this.open();
+    } catch (err) {
+      this.show(auto ? '' : (err.name === 'NotAllowedError' ? "Face ID didn't go through. Tap to try again." : "Couldn't use Face ID here: " + (err.message || err.name)));
+    } finally { this.busy = false; }
+  },
+  reset() { try { localStorage.removeItem(this.KEY); } catch {} this.show('Tap below to set up Face ID again.'); }
+};
 
 // ---------- start ----------
 async function load() {
@@ -582,7 +647,8 @@ async function load() {
   const n = new Date(); S.month = new Date(n.getFullYear(), n.getMonth(), 1);
   try { await DB.open(); navigator.storage?.persist?.(); await load(); }
   catch { toast("Storage isn't available in this browser mode"); }
-  render();
+  await Lock.init();
+  if (Lock.locked) Lock.unlock(true); else render();
 })();
 </script>
 </body>
