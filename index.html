@@ -226,7 +226,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.2'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.3'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -258,6 +258,14 @@ const STANDARD = [
  "What was the highlight?",
  "What was the lowlight?"
 ];
+// swap unanswered leftovers of older prompt sets for the standard seven; answered ones and your own stay
+const stdBusy = (e, x) => S.audio.some(a => a.entryId === e.id && a.t === 'qa:' + x.id);
+const stdStale = (e, x) => x.kind !== 'own' && !STANDARD.includes(x.q) && !x.a.trim() && !stdBusy(e, x);
+const stdNeeds = e => STANDARD.some(q => !e.qa.some(x => x.q === q)) || e.qa.some(x => stdStale(e, x));
+function applyStd(e) {
+  const keep = e.qa.filter(x => !stdStale(e, x)), std = STANDARD.map(q => keep.find(x => x.q === q) || { id: uid(), q, a: '', kind: 'std' });
+  e.qa = [...std, ...keep.filter(x => !STANDARD.includes(x.q))];
+}
 const COUNTRIES = ['Argentina','Belize','Bolivia','Brazil','Chile','Colombia','Costa Rica','Cuba','Ecuador','El Salvador','Guatemala','Honduras','Mexico','Nicaragua','Panama','Paraguay','Peru','Uruguay','Venezuela','United States','United Kingdom','Netherlands','Spain','Portugal','France','Italy','Greece','South Africa'];
 const CODES = Object.fromEntries('argentina:AR,belize:BZ,bolivia:BO,brazil:BR,brasil:BR,chile:CL,colombia:CO,costa rica:CR,cuba:CU,ecuador:EC,el salvador:SV,guatemala:GT,honduras:HN,mexico:MX,méxico:MX,nicaragua:NI,panama:PA,panamá:PA,paraguay:PY,peru:PE,perú:PE,uruguay:UY,venezuela:VE,guyana:GY,suriname:SR,french guiana:GF,united states:US,usa:US,us:US,united states of america:US,united kingdom:GB,uk:GB,england:GB,scotland:GB,wales:GB,ireland:IE,netherlands:NL,holland:NL,spain:ES,españa:ES,portugal:PT,france:FR,italy:IT,greece:GR,germany:DE,switzerland:CH,austria:AT,belgium:BE,canada:CA,australia:AU,new zealand:NZ,japan:JP,thailand:TH,vietnam:VN,indonesia:ID,india:IN,china:CN,south korea:KR,singapore:SG,malaysia:MY,philippines:PH,morocco:MA,egypt:EG,kenya:KE,tanzania:TZ,south africa:ZA,turkey:TR,croatia:HR,iceland:IS,norway:NO,sweden:SE,denmark:DK,finland:FI,poland:PL,czechia:CZ,czech republic:CZ,hungary:HU,dominican republic:DO,jamaica:JM,puerto rico:PR,haiti:HT,bahamas:BS,trinidad and tobago:TT,falkland islands:FK'.split(',').map(x => x.split(':')));
 // soft fill, text and outline colours; Colombia and Panama are fixed, neighbours get different ones
@@ -492,6 +500,11 @@ async function load() {
   if (cut.length) setTimeout(() => toast(cut.length > 1 ? 'Recovered recordings that were cut off' : 'Recovered a recording that was cut off'), 600);
   for (const e of S.entries) e.qa = (e.qa || []).filter(x => !(DROPPED.includes(x.q) && !(x.a || '').trim()));
   for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; }
+  // one-off: chapters made before the standard prompts existed still carry the old random questions
+  if (lsGet('tj.std') !== '2') {
+    for (const e of S.entries) { e.qa.forEach(x => { x.id ||= uid(); }); if (stdNeeds(e)) { applyStd(e); await putEntry(e); } }
+    lsSet('tj.std', '2');
+  }
 }
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -728,7 +741,7 @@ function entryHTML(e) {
         ? `<input data-field="qq" data-i="${i}" value="${esc(x.q)}" placeholder="Your own heading">`
         : `<div class="q">${x.kind === 'smart' ? '✨ ' : ''}${esc(x.q)}</div>`}${x.a.trim() ? `<span class="ckk">${ico('check', 13, '#33502A', 3)}</span>` : ''}<button class="x" data-act="rm-q" data-i="${i}" aria-label="Remove question">×</button></div><textarea data-field="qa" data-i="${i}" placeholder="Type, or tap Record and talk…">${esc(x.a)}</textarea><div class="voice" data-t="qa:${esc(x.id || (x.id = uid()))}"></div></div>`).join('')
       || '<p class="hint">No questions yet.</p>';
-    body += `<div class="btns">${STANDARD.some(q => !e.qa.some(x => x.q === q)) ? '<button class="btn" data-act="std-q">+ Standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q">✨ Smart questions</button><button class="btn" data-act="own-q">+ My own</button></div>`;
+    body += `<div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q">✨ Smart questions</button><button class="btn" data-act="own-q">+ My own</button></div>`;
   } else if (tab === 'photos') {
     body = `<section class="sec"><div class="photos">${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}<label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*" multiple data-change="photos" hidden></label></div></section>`;
   } else if (tab === 'notes') {
@@ -1323,7 +1336,7 @@ document.addEventListener('click', async ev => {
     case 'add-country': addCountry(); break;
     case 'rm-country': e.countries.splice(+t.dataset.i, 1); saveEntry(e); rerender(); break;
     case 'fill-days': { const f = e.days[e.start]; if (!f) { toast("Add the first day's place first"); break; } range(e.start, e.end).forEach(d => e.days[d] = f); saveEntry(e); rerender(); break; }
-    case 'std-q': { const have = e.qa.map(x => x.q); STANDARD.filter(q => !have.includes(q)).forEach(q => e.qa.push({ id: uid(), q, a: '', kind: 'std' })); saveEntry(e); rerender(); break; }
+    case 'std-q': applyStd(e); saveEntry(e); rerender(); break;
     case 'more-q': if (addFixed(e, 1)) { const ts = $$('textarea[data-field="qa"]'); ts[ts.length - 1]?.focus(); } break;
     case 'own-q': { e.qa.push({ id: uid(), q: '', a: '', kind: 'own' }); saveEntry(e); rerender(); const ins = $$('input[data-field="qq"]'); ins[ins.length - 1]?.focus(); break; }
     case 'smart-q': smartQuestions(e, t); break;
