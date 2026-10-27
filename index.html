@@ -210,6 +210,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .mlh span{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mlh small{font-size:12px;color:var(--muted);line-height:1.35}
 .mseg{display:flex;gap:8px}
+.mvia{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .mseg button{flex:1;height:40px;border-radius:20px;border:1.5px solid #E6D9C3;background:#FFFDF8;color:var(--ink,#3a3128);font-weight:600;font-size:13.5px;cursor:pointer}
 .mseg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #mappins{position:absolute;inset:0;pointer-events:none}
@@ -289,7 +290,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.16'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.17'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1464,13 +1465,13 @@ function dec6(t) { // Valhalla's encoded line (polyline, 6 decimals) to [lat, lo
 }
 // Ask for a route that sticks to the main roads. First choice is Valhalla (set to favour highways and avoid tracks);
 // if that is unreachable, OSRM, picking whichever of its alternatives uses the most numbered highways.
-async function roadRoute(a, b) {
+async function roadRoute(a, b, via = []) {
   try {
-    const q = { locations: [{ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }], costing: 'auto', costing_options: { auto: { use_highways: 1, use_tolls: 1, use_trails: 0, use_living_streets: 0, use_ferry: 0.3 } }, directions_options: { units: 'kilometers' } };
+    const q = { locations: [{ lat: a[0], lon: a[1] }, ...via.map(v => ({ lat: v[0], lon: v[1], type: 'through' })), { lat: b[0], lon: b[1] }], costing: 'auto', costing_options: { auto: { use_highways: 1, use_tolls: 1, use_trails: 0, use_living_streets: 0, use_ferry: 0.3 } }, directions_options: { units: 'kilometers' } };
     const r = await fetch('https://valhalla1.openstreetmap.de/route?json=' + encodeURIComponent(JSON.stringify(q)));
     if (r.ok) { const j = await r.json(), l = j.trip && j.trip.legs; if (l && l.length) return { c: l.flatMap(x => dec6(x.shape)), km: Math.round(j.trip.summary.length), src: 'valhalla' }; }
   } catch {}
-  const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson&steps=true&alternatives=3`);
+  const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${[a, ...via, b].map(q => q[1] + ',' + q[0]).join(';')}?overview=full&geometries=geojson&steps=true${via.length ? '' : '&alternatives=3'}`);
   if (!r.ok) throw new Error('busy');
   const j = await r.json(); if (!j.routes || !j.routes.length) { if (j.code === 'NoRoute') return 'none'; throw new Error('bad'); }
   const fast = Math.min(...j.routes.map(x => x.duration)); let best = null, bs = -9;
@@ -1511,7 +1512,7 @@ const MapV = {
   },
   missing() { const m = new Map(); this.all.forEach(x => { if (!x.ll && !m.has(x.key)) m.set(x.key, x); }); return [...m.values()]; },
   async mount() {
-    this.destroy(); this.alive = true; this.placing = ''; this.auto = true;
+    this.destroy(); this.alive = true; this.placing = ''; this.via = 0; this.auto = true;
     const box = $('#mapbox'); if (!box) return;
     const meas = () => { this.W = box.clientWidth; this.H = box.clientHeight; };
     this.compute(); this.panel(); meas();
@@ -1613,7 +1614,7 @@ const MapV = {
     let st = 'Straight line. Choose Drove to follow the main roads.';
     if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km. Tap Drove again to redo it.` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
     else if (r) st = 'Straight line, like a flight.';
-    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div></div>`;
+    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div>${road ? `<div class="mvia"><button class="btn small" data-act="leg-via">＋ Route via a point</button>${r.via && r.via.length ? `<button class="btn small" data-act="leg-via-clear">Clear ${r.via.length} point${r.via.length > 1 ? 's' : ''}</button>` : ''}</div>` : ''}</div>`;
   },
   async setLeg(m) {
     const i = this.idx; if (i < 1 || !this.pts[i]) return; Vault.geo ||= {};
@@ -1628,11 +1629,11 @@ const MapV = {
         if (!this.needs(i)) continue;
         const a = this.pts[i - 1], b = this.pts[i], k = this.lk(i);
         try {
-          const x = await roadRoute(a.ll, b.ll);
-          if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll };
+          const old = this.rec(i), via = (old && old.via) || [], x = await roadRoute(a.ll, b.ll, via);
+          if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll, ...(via.length ? { via } : {}) };
           else {
             let c = x.c, tol = .0005; while (c.length > 500 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
-            Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
+            Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, ...(via.length ? { via } : {}), p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
           }
           await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel();
         } catch { toast('The route service is busy. It will try again later'); break; } // no signal or busy: try again next time
@@ -1661,7 +1662,7 @@ const MapV = {
   },
   note(miss) {
     const n = $('#mapnote'); if (!n) return;
-    n.innerHTML = this.placing ? `<span class="mchip on">Tap the map where ${esc((this.all.find(x => x.key === this.placing) || {}).place || 'it is')} is <button data-act="map-cancel">Cancel</button></span>` : miss.length ? `<button class="mchip" data-act="map-missing">📍 ${miss.length} place${miss.length > 1 ? 's' : ''} not on the map. Place ${miss.length > 1 ? 'them' : 'it'}</button>` : '';
+    n.innerHTML = this.via ? `<span class="mchip on">Tap the road you want to pass through <button data-act="map-cancel">Cancel</button></span>` : this.placing ? `<span class="mchip on">Tap the map where ${esc((this.all.find(x => x.key === this.placing) || {}).place || 'it is')} is <button data-act="map-cancel">Cancel</button></span>` : miss.length ? `<button class="mchip" data-act="map-missing">📍 ${miss.length} place${miss.length > 1 ? 's' : ''} not on the map. Place ${miss.length > 1 ? 'them' : 'it'}</button>` : '';
   },
   play() {
     if (this.timer) { clearInterval(this.timer); this.timer = 0; this.panel(); return; }
@@ -1689,7 +1690,7 @@ const MapV = {
     };
     const up = ev => {
       if (!this.ptr.has(ev.pointerId)) return; this.ptr.delete(ev.pointerId);
-      if (this.drag && this.drag.moved < 8 && !this.ptr.size && this.placing) this.dropPin(pos(ev));
+      if (this.drag && this.drag.moved < 8 && !this.ptr.size && (this.placing || this.via)) this.dropPin(pos(ev));
       if (!this.ptr.size) this.drag = null;
     };
     box.onpointerup = up; box.onpointercancel = up;
@@ -1697,7 +1698,8 @@ const MapV = {
     const card = $('#mapcard'); if (card) card.oninput = ev => { if (ev.target.id === 'mapidx') this.go(+ev.target.value); };
   },
   async dropPin(p) {
-    const v = this.vb, k = v.w / this.W, [la, lo] = unproj(v.x + p[0] * k, v.y + p[1] * k), key = this.placing; this.placing = '';
+    const v = this.vb, k = v.w / this.W, [la, lo] = unproj(v.x + p[0] * k, v.y + p[1] * k), key = this.placing, vi = this.via; this.placing = ''; this.via = 0;
+    if (vi) { const r = this.rec(vi); if (r && r.m === 'road') { r.via = [...(r.via || []), [+la.toFixed(4), +lo.toFixed(4)]]; r.redo = 1; await Vault.saveGeo(); this.note(this.missing()); this.panel(); this.fetchPending(); } return; }
     Vault.geo ||= {}; Vault.geo[key] = [+la.toFixed(4), +lo.toFixed(4), 'manual']; await Vault.saveGeo(); this.refresh(key);
   },
   refresh(selKey) {
@@ -1767,9 +1769,11 @@ document.addEventListener('click', async ev => {
     case 'map-fit': MapV.fit(true); break;
     case 'map-play': MapV.play(); break;
     case 'leg': MapV.setLeg(t.dataset.m); break;
+    case 'leg-via': MapV.via = MapV.idx; MapV.note(MapV.missing()); toast('Tap the map on the road to pass through'); break;
+    case 'leg-via-clear': { const r = MapV.rec(MapV.idx); if (r) { delete r.via; r.redo = 1; await Vault.saveGeo(); MapV.panel(); MapV.fetchPending(); } break; }
     case 'map-open': { MapV.destroy(); S.mapFrom = ''; S.mapFocus = ''; openEntry(t.dataset.id); break; }
     case 'map-move': { const p = MapV.pts[MapV.idx]; if (p) { MapV.placing = p.key; MapV.note(MapV.missing()); toast('Tap the map where it really is'); } break; }
-    case 'map-cancel': MapV.placing = ''; MapV.note(MapV.missing()); break;
+    case 'map-cancel': MapV.placing = ''; MapV.via = 0; MapV.note(MapV.missing()); break;
     case 'map-missing': openSheet(`<h3>Places not on the map</h3><p class="hint" style="margin-top:0">The built-in list covers popular spots across Latin America. For the rest you can look them up on OpenStreetMap (it receives only the place and country names), or drop a pin yourself.</p><div class="stack"><button class="btn pri" data-act="map-find"${navigator.onLine ? '' : ' disabled'}>${navigator.onLine ? 'Look them up online' : 'Look up online (needs signal)'}</button>${MapV.missing().map(m => `<button class="btn" data-act="map-place" data-k="${esc(m.key)}">📍 Drop a pin for ${esc(m.place)}</button>`).join('')}<button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
     case 'map-find': closeSheet(); MapV.findOnline(); break;
     case 'map-place': { closeSheet(); MapV.placing = t.dataset.k; MapV.note(MapV.missing()); toast('Tap the map where it is'); break; }
