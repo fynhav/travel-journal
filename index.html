@@ -280,7 +280,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.9'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.10'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1438,14 +1438,18 @@ function locate(st) {
 }
 
 const MapV = {
-  world: null, alive: false, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
+  world: null, alive: false, auto: true, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
   destroy() { this.ro?.disconnect(); this.alive = false; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); this.ptr.clear(); },
   async loadWorld() {
     if (this.world) return this.world;
     const t = await (await fetch('vendor/world-50m.json')).json();
     const [sx, sy] = t.transform.scale, [tx, ty] = t.transform.translate;
     const arcs = t.arcs.map(a => { let x = 0, y = 0; return a.map(([dx, dy]) => { x += dx; y += dy; return [x * sx + tx, y * sy + ty]; }); });
-    const ring = ids => { let p = []; for (const i of ids) { const a = i < 0 ? arcs[~i].slice().reverse() : arcs[i]; p = p.concat(p.length ? a.slice(1) : a); } return p; };
+    const ring = ids => {
+      let p = []; for (const i of ids) { const a = i < 0 ? arcs[~i].slice().reverse() : arcs[i]; p = p.concat(p.length ? a.slice(1) : a); }
+      let lo = 180, hi = -180; for (const q of p) { if (q[0] < lo) lo = q[0]; if (q[0] > hi) hi = q[0]; }
+      return hi - lo > 180 ? p.map(([x, y]) => [x < 0 ? x + 360 : x, y]) : p; // a ring that crosses the date line: keep it in one piece
+    };
     const dOf = p => 'M' + p.map(([lo, la]) => mx(lo).toFixed(1) + ' ' + my(la).toFixed(1)).join('L') + 'Z';
     const out = [];
     for (const g of t.objects.countries.geometries) {
@@ -1462,16 +1466,18 @@ const MapV = {
   },
   missing() { const m = new Map(); this.all.forEach(x => { if (!x.ll && !m.has(x.key)) m.set(x.key, x); }); return [...m.values()]; },
   async mount() {
-    this.destroy(); this.alive = true; this.placing = '';
+    this.destroy(); this.alive = true; this.placing = ''; this.auto = true;
     const box = $('#mapbox'); if (!box) return;
     const meas = () => { this.W = box.clientWidth; this.H = box.clientHeight; };
-    this.compute(); this.panel(); meas(); if (!this.W || !this.H) { await new Promise(r => requestAnimationFrame(r)); meas(); }
+    this.compute(); this.panel(); meas();
+    for (let k = 0; k < 8 && (this.W < 100 || this.H < 150); k++) { await new Promise(r => requestAnimationFrame(r)); if (!this.alive) return; meas(); }
     const f = S.mapFocus; this.idx = f ? Math.max(0, this.pts.findIndex(p => p.eids.has(f))) : Math.max(0, this.pts.length - 1);
     this.fit(false); this.build(); this.update(); this.panel();
     this.bind(box);
     this.ro = new ResizeObserver(() => { // the bottom card changes the map's height after it is first measured
       const w = box.clientWidth, h = box.clientHeight; if (!w || !h || (w === this.W && h === this.H) || !this.vb) return;
-      const v = this.vb, cx = v.x + v.w / 2, cy = v.y + v.h / 2; this.W = w; this.H = h; this.goto(cx, cy, v.w, 0);
+      const v = this.vb, cx = v.x + v.w / 2, cy = v.y + v.h / 2; this.W = w; this.H = h;
+      if (this.auto) this.fit(false); else this.goto(cx, cy, v.w, 0);
     });
     this.ro.observe(box);
     try { const w = await this.loadWorld(); if (!this.alive) return; this.drawLand(w); } catch { const n = $('#mapnote'); if (n) n.dataset.nomap = '1'; }
@@ -1533,7 +1539,7 @@ const MapV = {
     const r = $('#rt1'); if (r) r.setAttribute('d', this.pts.length > 1 ? d : '');
   },
   go(i, fly = true) {
-    if (!this.pts.length) return; this.idx = Math.max(0, Math.min(this.pts.length - 1, i));
+    if (!this.pts.length) return; this.auto = false; this.idx = Math.max(0, Math.min(this.pts.length - 1, i));
     const p = this.pts[this.idx]; if (fly) this.goto(p.x, p.y, Math.min(this.vb.w, this.fitW * .6), 650); else this.update();
     this.panel();
   },
@@ -1561,14 +1567,14 @@ const MapV = {
     this.panel();
   },
   zoom(f, sx, sy) {
-    const v = this.vb; if (!v) return; cancelAnimationFrame(this.cam);
+    const v = this.vb; if (!v) return; cancelAnimationFrame(this.cam); this.auto = false;
     sx ??= this.W / 2; sy ??= this.H / 2;
     const w = Math.max(.6 * PS, Math.min(360 * PS, v.w / f)), k = w / this.W, ax = v.x + sx / this.W * v.w, ay = v.y + sy / this.H * v.h;
     this.vb = { x: ax - sx * k, y: ay - sy * k, w, h: w * this.H / this.W }; this.update();
   },
   bind(box) {
     const pos = ev => { const r = box.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
-    box.onpointerdown = ev => { if (ev.target.closest('.mp,.mapctl,#mapnote,button')) return; box.setPointerCapture(ev.pointerId); this.ptr.set(ev.pointerId, pos(ev)); this.drag = { moved: 0, start: pos(ev) }; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); };
+    box.onpointerdown = ev => { if (ev.target.closest('.mp,.mapctl,#mapnote,button')) return; this.auto = false; box.setPointerCapture(ev.pointerId); this.ptr.set(ev.pointerId, pos(ev)); this.drag = { moved: 0, start: pos(ev) }; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); };
     box.onpointermove = ev => {
       if (!this.ptr.has(ev.pointerId)) return; const old = this.ptr.get(ev.pointerId), now = pos(ev), v = this.vb; this.ptr.set(ev.pointerId, now);
       if (this.ptr.size === 1) { this.drag.moved += Math.abs(now[0] - old[0]) + Math.abs(now[1] - old[1]); const k = v.w / this.W; this.vb = { ...v, x: v.x - (now[0] - old[0]) * k, y: v.y - (now[1] - old[1]) * k }; this.update(); }
