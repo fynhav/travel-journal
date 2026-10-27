@@ -204,6 +204,14 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .ld.vis{stroke-width:1.1}
 .rt0{stroke:#B5562F;stroke-opacity:.38;stroke-width:2.5;stroke-dasharray:2 7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .rt1{stroke:#B5562F;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.rf1{stroke:#B5562F;stroke-width:3;stroke-dasharray:9 7;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.mleg{margin-top:10px;padding-top:10px;border-top:1px solid #F0E8D8}
+.mlh{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;min-width:0}
+.mlh span{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mlh small{font-size:12px;color:var(--muted);line-height:1.35}
+.mseg{display:flex;gap:8px}
+.mseg button{flex:1;height:40px;border-radius:20px;border:1.5px solid #E6D9C3;background:#FFFDF8;color:var(--ink,#3a3128);font-weight:600;font-size:13.5px;cursor:pointer}
+.mseg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #mappins{position:absolute;inset:0;pointer-events:none}
 .mp{position:absolute;left:0;top:0;width:28px;height:28px;border:0;background:none;padding:0;pointer-events:auto;cursor:pointer;will-change:transform}
 .mp i{position:absolute;inset:0;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:12px;font-style:normal;text-align:center;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(80,50,20,.35);box-sizing:border-box;line-height:23px}
@@ -281,7 +289,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.13'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.14'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1440,6 +1448,12 @@ function locate(st) {
   const z = gazLookup(st.place, st.cc); return z ? { ll: z.ll, src: 'list' } : null;
 }
 
+function simplify(c, tol) { // Douglas–Peucker on [lat, lon] points, so a long road route stays small to store
+  const keep = new Uint8Array(c.length), st = [[0, c.length - 1]]; keep[0] = keep[c.length - 1] = 1;
+  const dist = (p, a, b) => { const dx = b[1] - a[1], dy = b[0] - a[0], l = dx * dx + dy * dy; let t = l ? ((p[1] - a[1]) * dx + (p[0] - a[0]) * dy) / l : 0; t = Math.max(0, Math.min(1, t)); return Math.hypot(p[1] - (a[1] + t * dx), p[0] - (a[0] + t * dy)); };
+  while (st.length) { const [s, e] = st.pop(); let md = 0, mi = -1; for (let i = s + 1; i < e; i++) { const d = dist(c[i], c[s], c[e]); if (d > md) { md = d; mi = i; } } if (mi > 0 && md > tol) { keep[mi] = 1; st.push([s, mi], [mi, e]); } }
+  return c.filter((_, i) => keep[i]);
+}
 const MapV = {
   world: null, alive: false, auto: true, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
   destroy() { this.ro?.disconnect(); this.alive = false; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); this.ptr.clear(); },
@@ -1476,7 +1490,7 @@ const MapV = {
     for (let k = 0; k < 8 && (this.W < 100 || this.H < 150); k++) { await new Promise(r => requestAnimationFrame(r)); if (!this.alive) return; meas(); }
     const f = S.mapFocus; this.idx = f ? Math.max(0, this.pts.findIndex(p => p.eids.has(f))) : Math.max(0, this.pts.length - 1);
     this.fit(false); this.build(); this.update(); this.panel();
-    this.bind(box);
+    this.bind(box); this.fetchPending();
     this.ro = new ResizeObserver(() => { // the bottom card changes the map's height after it is first measured
       const w = box.clientWidth, h = box.clientHeight; if (!w || !h || (w === this.W && h === this.H) || !this.vb) return;
       const v = this.vb, cx = v.x + v.w / 2, cy = v.y + v.h / 2; this.W = w; this.H = h;
@@ -1521,8 +1535,7 @@ const MapV = {
   build() {
     const box = $('#mappins'); if (!box) return;
     box.innerHTML = this.pts.map((p, i) => `<button class="mp" data-i="${i}" aria-label="${esc(p.place)}"><i>${i + 1}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
-    const d = this.pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('');
-    const r = $('#rt0'); if (r) r.setAttribute('d', d);
+    const r = $('#rt0'); if (r) r.setAttribute('d', this.legPaths(this.pts.length - 1).all);
   },
   update() {
     const svg = $('#mapsvg'); if (!svg || !this.vb) return; const v = this.vb;
@@ -1545,8 +1558,61 @@ const MapV = {
     this.route();
   },
   route() {
-    const d = this.pts.slice(0, this.idx + 1).map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('');
-    const r = $('#rt1'); if (r) r.setAttribute('d', this.pts.length > 1 ? d : '');
+    const q = this.legPaths(this.idx), a = $('#rt1'), b = $('#rf1'); if (a) a.setAttribute('d', q.road); if (b) b.setAttribute('d', q.str);
+  },
+  // ----- how each leg was travelled: by road follows the real driving route, otherwise a straight line -----
+  lk(i) { return 'leg:' + this.pts[i - 1].key + '>' + this.pts[i].key; },
+  rec(i) { return Vault.geo && Vault.geo[this.lk(i)] || null; },
+  stale(i, r) { const a = this.pts[i - 1].ll, b = this.pts[i].ll; return !r.a || !r.b || Math.abs(r.a[0] - a[0]) > .02 || Math.abs(r.a[1] - a[1]) > .02 || Math.abs(r.b[0] - b[0]) > .02 || Math.abs(r.b[1] - b[1]) > .02; },
+  geom(i) {
+    const r = this.rec(i); if (!r || r.m !== 'road' || !r.p || this.stale(i, r)) return null;
+    if (!r._x) { const x = []; for (let k = 0; k + 1 < r.p.length; k += 2) x.push([mx(r.p[k + 1]), my(r.p[k])]); Object.defineProperty(r, '_x', { value: x, writable: true, configurable: true, enumerable: false }); }
+    return r._x;
+  },
+  needs(i) { const r = this.rec(i); return !!r && r.m === 'road' && !r.none && (!r.p || this.stale(i, r)); },
+  legPaths(upTo) {
+    let road = '', str = '', all = '';
+    for (let i = 1; i <= upTo && i < this.pts.length; i++) {
+      const a = this.pts[i - 1], b = this.pts[i], g = this.geom(i), m = 'M' + a.x.toFixed(1) + ' ' + a.y.toFixed(1);
+      const seg = m + (g ? g.map(q => 'L' + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('') : '') + 'L' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
+      all += seg; if (g) road += seg; else str += seg;
+    }
+    return { road, str, all };
+  },
+  legRow() {
+    const i = this.idx; if (i < 1 || !this.pts[i]) return '';
+    const r = this.rec(i), road = !!r && r.m === 'road', a = this.pts[i - 1];
+    let st = 'Straight line. Choose Drove to follow the real road.';
+    if (road) st = this.geom(i) ? `Following the road · ${r.km} km` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
+    else if (r) st = 'Straight line, like a flight.';
+    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div></div>`;
+  },
+  async setLeg(m) {
+    const i = this.idx; if (i < 1 || !this.pts[i]) return; Vault.geo ||= {};
+    Vault.geo[this.lk(i)] = m === 'road' ? { m: 'road', a: this.pts[i - 1].ll, b: this.pts[i].ll } : { m: 'fly' };
+    await Vault.saveGeo(); this.build(); this.update(); this.panel();
+    if (m === 'road') { if (navigator.onLine) this.fetchPending(); else toast('Saved. The road route is drawn when you have signal'); }
+  },
+  async fetchPending() {
+    if (this.fbusy || !navigator.onLine) return; this.fbusy = true;
+    try {
+      for (let i = 1; i < this.pts.length && this.alive; i++) {
+        if (!this.needs(i)) continue;
+        const a = this.pts[i - 1], b = this.pts[i], k = this.lk(i);
+        try {
+          const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.ll[1]},${a.ll[0]};${b.ll[1]},${b.ll[0]}?overview=full&geometries=geojson`);
+          if (!r.ok) { toast('The route service is busy. It will try again later'); break; }
+          const j = await r.json(), rt = j.routes && j.routes[0];
+          if (!rt) { if (j.code === 'NoRoute') Vault.geo[k] = { m: 'road', none: 1, a: a.ll, b: b.ll }; else break; }
+          else {
+            let c = rt.geometry.coordinates.map(q => [q[1], q[0]]), tol = .0006; while (c.length > 450 && tol < 1) { c = simplify(rt.geometry.coordinates.map(q => [q[1], q[0]]), tol); tol *= 1.7; }
+            Vault.geo[k] = { m: 'road', km: Math.round(rt.distance / 1000), a: a.ll, b: b.ll, p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
+          }
+          await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel();
+        } catch { break; } // no signal after all: try again next time
+        await new Promise(r => setTimeout(r, 1100));
+      }
+    } finally { this.fbusy = false; }
   },
   go(i, fly = true) {
     if (!this.pts.length) return; this.auto = false; this.idx = Math.max(0, Math.min(this.pts.length - 1, i));
@@ -1557,12 +1623,13 @@ const MapV = {
     const c = $('#mapcard'); if (!c) return;
     const P = this.pts, A = this.all, miss = this.missing();
     const ccs = new Set(A.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
-    let km = 0; for (let i = 1; i < P.length; i++) km += hav(P[i - 1].ll, P[i].ll);
-    const stats = `<div class="mstats"><div><b>${A.length}</b><span>stop${A.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km in lines</span></div></div>`;
+    let km = 0; for (let i = 1; i < P.length; i++) { const r = this.rec(i); km += r && r.m === 'road' && this.geom(i) ? r.km : hav(P[i - 1].ll, P[i].ll); }
+    const stats = `<div class="mstats"><div><b>${A.length}</b><span>stop${A.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km, roughly</span></div></div>`;
     if (!P.length) { c.innerHTML = `${stats}<p class="hint" style="margin:10px 0 0">${A.length ? 'None of your places are on the map yet. Tap “Place them” above to find or drop them.' : 'Add a place to a day in a chapter and it shows up here.'}</p>`; this.note(miss); return; }
     const p = P[this.idx];
     c.innerHTML = `${stats}
       <div class="mstop"><div style="min-width:0;flex:1"><b>${this.idx + 1}. ${esc(p.place)}</b><small>${flagOf(p.country)} ${esc(p.country || '')} · ${rangeLabel(p.start, p.end)}${p.days > 1 ? ' · ' + p.days + ' days' : ''}</small></div><button class="btn small" data-act="map-move">Move pin</button><button class="btn small pri" data-act="map-open" data-id="${p.eid}">Chapter</button></div>
+      ${this.legRow()}
       <div class="mctl"><button class="circ" data-act="map-play" aria-label="${this.timer ? 'Pause' : 'Play the journey'}">${ico(this.timer ? 'pause' : 'play', 20, '#B5562F', 2.2)}</button><div style="flex:1;min-width:0"><input type="range" id="mapidx" min="0" max="${Math.max(0, P.length - 1)}" value="${this.idx}" aria-label="Move through the trip"><div class="mdates"><span>${fmt(P[0].start, SHORT)}</span><span>${fmt(P[P.length - 1].end, SHORT)}</span></div></div></div>`;
     this.note(miss);
   },
@@ -1630,7 +1697,7 @@ const MapV = {
 };
 const mapHTML = () => `<div class="mapscreen">
   <header class="top c"><div class="row"><button class="cbtn" data-act="map-back" aria-label="Back">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Latin America</div><h1>Trip map</h1></div><div style="width:42px"></div></div></header>
-  <div id="mapbox"><svg id="mapsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="land"></g><path id="rt0" class="rt0" fill="none"/><path id="rt1" class="rt1" fill="none"/></svg><div id="mappins"></div><div id="mapnote"></div>
+  <div id="mapbox"><svg id="mapsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="land"></g><path id="rt0" class="rt0" fill="none"/><path id="rt1" class="rt1" fill="none"/><path id="rf1" class="rf1" fill="none"/></svg><div id="mappins"></div><div id="mapnote"></div>
     <div class="mapctl"><button class="cbtn" data-act="map-in" aria-label="Zoom in">${ico('plus', 18)}</button><button class="cbtn" data-act="map-out" aria-label="Zoom out">${ico('minus', 18)}</button><button class="cbtn" data-act="map-fit" aria-label="Show everything">${ico('fit', 18)}</button></div></div>
   <div class="mapcard" id="mapcard"></div></div>`;
 
@@ -1673,6 +1740,7 @@ document.addEventListener('click', async ev => {
     case 'map-out': MapV.zoom(1 / 1.6); break;
     case 'map-fit': MapV.fit(true); break;
     case 'map-play': MapV.play(); break;
+    case 'leg': MapV.setLeg(t.dataset.m); break;
     case 'map-open': { MapV.destroy(); S.mapFrom = ''; S.mapFocus = ''; openEntry(t.dataset.id); break; }
     case 'map-move': { const p = MapV.pts[MapV.idx]; if (p) { MapV.placing = p.key; MapV.note(MapV.missing()); toast('Tap the map where it really is'); } break; }
     case 'map-cancel': MapV.placing = ''; MapV.note(MapV.missing()); break;
@@ -1781,7 +1849,7 @@ document.addEventListener('change', async ev => {
 });
 document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } });
 window.addEventListener('pagehide', () => { flush(); if (Rec.active) { Rec.cut = true; Rec.stop(); } });
-window.addEventListener('online', () => { Stt.run(); paintVoice(); SW.check(true); });
+window.addEventListener('online', () => { Stt.run(); paintVoice(); SW.check(true); if (MapV.alive) MapV.fetchPending(); });
 window.addEventListener('offline', () => { paintVoice(); Rec.overlay(); });
 setInterval(() => { if (!document.hidden) Stt.run(); }, 30000);
 document.addEventListener('visibilitychange', () => {
