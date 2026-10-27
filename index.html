@@ -146,6 +146,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:12px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
+const APP_VERSION = '2026-10-27.1'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -627,7 +628,23 @@ function openSettings() {
     <h2 style="margin-top:18px">The book</h2>
     <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip. This one is not encrypted, so it can be read by Claude.</p>
     <div class="btns"><button class="btn" data-act="export-book">Export whole book</button></div>
+    <h2 style="margin-top:18px">App version</h2>
+    <p class="hint" style="margin-top:0">Version ${APP_VERSION}. Updates normally arrive within about ten minutes. To get one sooner, check now.</p>
+    <div class="btns"><button class="btn" data-act="check-update">Check for updates</button></div><p class="hint" id="updMsg"></p>
     <div class="stack"><button class="btn ghost" data-act="close-sheet">Close</button></div>`);
+}
+async function checkUpdate() {
+  const out = $('#updMsg'); out.textContent = 'Checking…';
+  try {
+    await flush();
+    const r = await fetch('index.html?cb=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw 0;
+    const v = (await r.text()).match(/const APP_VERSION = '([^']+)'/);
+    if (!v) throw 0;
+    if (v[1] === APP_VERSION) { out.textContent = "You're on the latest version."; return; }
+    out.textContent = 'Updating to ' + v[1] + '…';
+    location.replace('index.html?v=' + encodeURIComponent(v[1]));
+  } catch { out.textContent = "Couldn't check. You may be offline."; }
 }
 
 function openPhoto(id) {
@@ -1034,6 +1051,7 @@ document.addEventListener('click', async ev => {
     case 'v-retry': { const a = S.audio.find(x => x.id === t.dataset.id); if (a) { a.status = 'pending'; a.err = ''; await saveAudioMeta(a); paintVoice(); Stt.run(); } break; }
     case 'v-del': if (confirm('Delete this recording? It has not been turned into text yet.')) { await dropAudio(t.dataset.id); paintVoice(); if (S.view === 'cal') rerender(); } break;
     case 'stt-test': testStt(); break;
+    case 'check-update': checkUpdate(); break;
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
