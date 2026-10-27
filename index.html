@@ -132,7 +132,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .selbar .btns{margin-top:8px}
 .selbar .btn{flex:1}
 .nav{position:fixed;left:50%;transform:translateX(-50%);width:min(350px,calc(100% - 40px));bottom:calc(env(safe-area-inset-bottom) + 16px);height:66px;border-radius:33px;background:var(--card);border:1px solid #EADFC9;box-shadow:0 10px 30px rgba(120,90,50,.2);display:flex;align-items:center;justify-content:space-around;padding:0 8px;z-index:25}
-.nv{width:46px;height:46px;border-radius:50%;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#8B7F70;cursor:pointer;padding:0}
+.nv{width:44px;height:44px;flex:none;border-radius:50%;border:0;background:none;display:flex;align-items:center;justify-content:center;color:#8B7F70;cursor:pointer;padding:0}
 .nv.on{background:#F3E2CF;color:var(--accent)}
 .micfab{width:54px;height:54px;border-radius:50%;border:0;background:var(--accent);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 14px rgba(181,86,47,.4);margin-top:-6px;cursor:pointer;padding:0}
 .nav.bar{gap:8px;justify-content:flex-start}
@@ -280,7 +280,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.8'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.9'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -654,6 +654,7 @@ const navHTML = a => `<nav class="nav" aria-label="Main">
   <button class="nv${a === 'cal' ? ' on' : ''}" data-act="nav" data-v="cal" aria-label="Calendar">${ico('cal')}</button>
   <button class="nv${a === 'chapters' ? ' on' : ''}" data-act="nav" data-v="chapters" aria-label="Chapters">${ico('list')}</button>
   <button class="micfab" data-act="quick-rec" aria-label="Record a voice note">${ico('mic', 24, '#fff')}</button>
+  <button class="nv" data-act="map" aria-label="Trip map">${ico('map')}</button>
   <button class="nv${a === 'book' ? ' on' : ''}" data-act="nav" data-v="book" aria-label="Book">${ico('book')}</button>
   <button class="nv" data-act="settings" aria-label="Settings">${ico('gear')}</button></nav>`;
 const offlineBadge = short => (navigator.serviceWorker && navigator.serviceWorker.controller) ? `<span class="okb">${ico('check', 14, '#33502A', 2.6)}${short ? 'Offline' : 'Works offline'}</span>` : '';
