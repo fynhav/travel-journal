@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -18,7 +18,7 @@
 @font-face{font-family:"Plus Jakarta Sans";src:url(vendor/plus-jakarta-sans-latin-wght-normal.woff2) format("woff2");font-weight:200 800;font-display:swap}
 @font-face{font-family:Fraunces;src:url(vendor/fraunces-latin-wght-normal.woff2) format("woff2");font-weight:100 900;font-display:swap}
 :root{--paper:#F6F0E4;--card:#FFFDF8;--ink:#2E2823;--muted:#7A6E60;--line:#EADFC9;--band:#EFE2CB;--accent:#B5562F;--sel:#F6DECB;--danger:#A8402F;--serif:Fraunces,"New York","Iowan Old Style",Georgia,serif}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 [hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%;overflow-x:clip}
 html,body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 "Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
@@ -200,6 +200,15 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 #sheet .body{position:absolute;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;background:var(--card);border-radius:28px 28px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px)}
 #sheet .body > *{max-width:640px;margin-left:auto;margin-right:auto}
 #sheet label{margin-top:12px}
+#sheet.full .bg{display:none}
+#sheet.full .body{top:0;max-height:none;border-radius:0;background:var(--paper);padding:0 0 calc(env(safe-area-inset-bottom) + 36px)}
+#sheet.full .body > .top{max-width:none;margin:0}
+#sheet.full .body > .wrap{max-width:720px}
+#sheet.full .sec{margin:12px 0 0}
+#sheet.full .sec > label:first-of-type{margin-top:0}
+#sheet.full .sec .btns{margin-top:12px}
+#sheet.full .sec p.hint:last-child{margin-bottom:0}
+.sec .hint + .btns,.sec .hint + label{margin-top:12px}
 img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;background:var(--paper);display:block}
 #lock{position:fixed;inset:0;z-index:100;background:var(--paper);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
 #lock.on{display:flex}
@@ -231,7 +240,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.6'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.7'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -801,8 +810,8 @@ function entryHTML(e) {
 }
 
 // ---------- sheet ----------
-function openSheet(html) { $('#sheet .body').innerHTML = html; $('#sheet').classList.add('on'); $$('#sheet textarea').forEach(autosize); }
-function closeSheet() { if (keyPending) return; if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on'); if (S.view === 'entry') rerender(); }
+function openSheet(html, full) { const sh = $('#sheet'); sh.classList.toggle('full', !!full); $('#sheet .body').innerHTML = html; sh.classList.add('on'); if (!full) $('#sheet .body').scrollTop = 0; $$('#sheet textarea').forEach(autosize); }
+function closeSheet() { if (keyPending) return; if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on', 'full'); if (S.view === 'entry') rerender(); }
 
 let keyPending = false, rkShown = '';
 function showRecoveryKey(code) {
@@ -821,38 +830,41 @@ function askPassword(msg) {
 }
 function openSettings() {
   Store.refresh();
-  const lastB = +lsGet('tj.lastBackup') || 0;
-  openSheet(`<h3>Settings</h3>
-    <h2>Privacy lock</h2>
-    <p class="hint" style="margin-top:0">Everything is encrypted on this phone with your password, and the journal locks after a minute away from the app.</p>
-    <div class="btns"><button class="btn" data-act="lock-now">Lock now</button><button class="btn" data-act="change-pw">Change password</button></div>
-    <h2 style="margin-top:18px">Recovery key</h2>
-    <p class="hint" style="margin-top:0">If you forget your password, “Forgot password?” on the lock screen accepts your recovery key. Making a new key cancels the old one.</p>
-    <div class="btns"><button class="btn" data-act="new-rk">Make a new recovery key</button></div>
-    <h2 style="margin-top:18px">Voice notes</h2>
-    <p class="hint" style="margin-top:0">Tap 🎙 Record under any question. The audio is sent to the service below to be turned into text, then deleted from your phone. Without signal it waits and is sent later.</p>
-    <label>Transcription service<select data-change="sttprov">${Object.entries(STT).map(([k, v]) => `<option value="${k}"${Vault.stt.provider === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>
-    <p class="hint">${esc(STT[Vault.stt.provider].hint)}</p>
-    <label>${STT[Vault.stt.provider].name} API key<input type="password" data-field="sttkey" value="${esc(Vault.stt.key)}" placeholder="${Vault.stt.provider === 'groq' ? 'gsk_…' : 'sk-…'}" autocomplete="off"></label>
-    <label>Language you speak (blank = detect)<input data-field="sttlang" value="${esc(Vault.stt.lang)}" placeholder="en" autocapitalize="none" autocomplete="off" style="max-width:120px;display:block"></label>
-    <label class="chk"><input type="checkbox" data-change="sttclean"${Vault.stt.cleanup ? ' checked' : ''}> Tidy the text with Claude (punctuation, filler words)</label>
-    <p class="hint">Uses your Anthropic key below; only the transcript is sent. It never adds anything.</p>
-    <div class="btns"><button class="btn" data-act="stt-test">Test connection</button></div><p class="hint" id="sttTest"></p>
-    <label style="margin-top:18px">Anthropic API key (for ✨ smart questions and tidying voice text)<input type="password" data-field="key" value="${esc(Vault.apiKey)}" placeholder="sk-ant-…" autocomplete="off"></label>
-    <p class="hint">Stored encrypted on this phone. Without a key you still get the fixed questions.</p>
-    <h2 style="margin-top:18px">Storage</h2>
-    <div class="sbar"><i class="storeBar"></i></div><p class="hint storeLine" style="margin-top:0">${esc(Store.text())}</p>
-    ${Store.p === false ? '<p class="hint" style="margin-top:0">If the phone runs very low on space, Safari may clear app data. Keep an iCloud backup.</p>' : ''}
-    <h2 style="margin-top:18px">iCloud backup</h2>
-    <p class="hint" style="margin-top:0">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive. Backups are encrypted, so you'll need your password to restore one.</p>
-    <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" data-change="restore" hidden></label></div>
-    <h2 style="margin-top:18px">The book</h2>
-    <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip. This one is not encrypted, so it can be read by Claude.</p>
-    <div class="btns"><button class="btn" data-act="export-book">Export whole book</button></div>
-    <h2 style="margin-top:18px">App version</h2>
-    <p class="hint" style="margin-top:0">Version ${APP_VERSION}. The app looks for updates by itself when you have signal. To check right now, tap below.</p>
-    <div class="btns"><button class="btn" data-act="check-update">Check for updates</button></div><p class="hint" id="updMsg"></p>
-    <div class="stack"><button class="btn ghost" data-act="close-sheet">Close</button></div>`);
+  const lastB = +lsGet('tj.lastBackup') || 0, sh = $('#sheet'), keep = sh.classList.contains('full') ? $('#sheet .body').scrollTop : 0;
+  openSheet(`<header class="top c"><div class="row"><button class="cbtn" data-act="close-sheet" aria-label="Back">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Travel journal</div><h1>Settings</h1></div><div style="width:42px"></div></div></header>
+  <div class="wrap" style="padding-top:2px">
+    <section class="sec"><h2>Privacy lock</h2>
+      <p class="hint" style="margin-top:0">Everything is encrypted on this phone with your password, and the journal locks after a minute away from the app.</p>
+      <div class="btns"><button class="btn" data-act="lock-now">Lock now</button><button class="btn" data-act="change-pw">Change password</button></div>
+      <h2 style="margin-top:20px">Recovery key</h2>
+      <p class="hint" style="margin-top:0">If you forget your password, “Forgot password?” on the lock screen accepts your recovery key. Making a new key cancels the old one.</p>
+      <div class="btns"><button class="btn" data-act="new-rk">Make a new recovery key</button></div></section>
+    <section class="sec"><h2>Voice notes</h2>
+      <p class="hint" style="margin-top:0">Tap Record under any question. The audio is sent to the service below to be turned into text, then deleted from your phone. Without signal it waits and is sent later.</p>
+      <label>Transcription service<select data-change="sttprov">${Object.entries(STT).map(([k, v]) => `<option value="${k}"${Vault.stt.provider === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>
+      <p class="hint">${esc(STT[Vault.stt.provider].hint)}</p>
+      <label>${STT[Vault.stt.provider].name} API key<input type="password" data-field="sttkey" value="${esc(Vault.stt.key)}" placeholder="${Vault.stt.provider === 'groq' ? 'gsk_…' : 'sk-…'}" autocomplete="off"></label>
+      <label>Language you speak (blank = detect)<input data-field="sttlang" value="${esc(Vault.stt.lang)}" placeholder="en" autocapitalize="none" autocomplete="off" style="max-width:120px;display:block"></label>
+      <div class="btns"><button class="btn" data-act="stt-test">Test connection</button></div><p class="hint" id="sttTest"></p></section>
+    <section class="sec"><h2>Claude</h2>
+      <label>Anthropic API key<input type="password" data-field="key" value="${esc(Vault.apiKey)}" placeholder="sk-ant-…" autocomplete="off"></label>
+      <p class="hint">Used for ✨ smart questions and for tidying voice text. Stored encrypted on this phone. Without a key you still get the fixed questions.</p>
+      <label class="chk"><input type="checkbox" data-change="sttclean"${Vault.stt.cleanup ? ' checked' : ''}> Tidy voice text with Claude (punctuation, filler words)</label>
+      <p class="hint" style="margin-bottom:0">Only the transcript is sent. It never adds anything.</p></section>
+    <section class="sec"><h2>Storage and backup</h2>
+      <div class="sbar" style="margin-top:0"><i class="storeBar"></i></div><p class="hint storeLine" style="margin-top:0">${esc(Store.text())}</p>
+      ${Store.p === false ? '<p class="hint" style="margin-top:0">If the phone runs very low on space, Safari may clear app data. Keep an iCloud backup.</p>' : ''}
+      <p class="hint" style="margin-top:14px">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive. Backups are encrypted, so you'll need your password to restore one.</p>
+      <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" data-change="restore" hidden></label></div></section>
+    <section class="sec"><h2>The book</h2>
+      <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip. This one is not encrypted, so it can be read by Claude.</p>
+      <div class="btns"><button class="btn" data-act="export-book">Export whole book</button></div></section>
+    <section class="sec"><h2>App version</h2>
+      <p class="hint" style="margin-top:0">Version ${APP_VERSION}. The app looks for updates by itself when you have signal. To check right now, tap below.</p>
+      <div class="btns"><button class="btn" data-act="check-update">Check for updates</button></div><p class="hint" id="updMsg"></p></section>
+    <div class="btns end"><button class="btn pri" data-act="close-sheet" style="flex:1">Done</button></div>
+  </div>`, true);
+  $('#sheet .body').scrollTop = keep;
 }
 const SW = {
   ok: 'serviceWorker' in navigator, last: 0,
@@ -1336,6 +1348,8 @@ async function testStt() {
 }
 
 // ---------- events ----------
+// no zoom: double-tap is handled by touch-action in the CSS, pinch by these
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, ev => ev.preventDefault()));
 document.addEventListener('click', async ev => {
   const t = ev.target.closest('[data-act]'); if (!t) return;
   const act = t.dataset.act, e = cur();
