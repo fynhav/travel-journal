@@ -289,7 +289,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.15'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.16'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1597,7 +1597,7 @@ const MapV = {
     if (!r._x) { const x = []; for (let k = 0; k + 1 < r.p.length; k += 2) x.push([mx(r.p[k + 1]), my(r.p[k])]); Object.defineProperty(r, '_x', { value: x, writable: true, configurable: true, enumerable: false }); }
     return r._x;
   },
-  needs(i) { const r = this.rec(i); return !!r && r.m === 'road' && !r.none && (!r.p || r.v !== 2 || this.stale(i, r)); },
+  needs(i) { const r = this.rec(i); return !!r && r.m === 'road' && !!(r.redo || !r.none && (!r.p || r.v !== 2 || this.stale(i, r))); },
   legPaths(upTo) {
     let road = '', str = '', all = '';
     for (let i = 1; i <= upTo && i < this.pts.length; i++) {
@@ -1611,13 +1611,13 @@ const MapV = {
     const i = this.idx; if (i < 1 || !this.pts[i]) return '';
     const r = this.rec(i), road = !!r && r.m === 'road', a = this.pts[i - 1];
     let st = 'Straight line. Choose Drove to follow the main roads.';
-    if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
+    if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km. Tap Drove again to redo it.` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
     else if (r) st = 'Straight line, like a flight.';
     return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div></div>`;
   },
   async setLeg(m) {
     const i = this.idx; if (i < 1 || !this.pts[i]) return; Vault.geo ||= {};
-    Vault.geo[this.lk(i)] = m === 'road' ? { m: 'road', a: this.pts[i - 1].ll, b: this.pts[i].ll } : { m: 'fly' };
+    const old = this.rec(i); Vault.geo[this.lk(i)] = m === 'road' ? (old && old.m === 'road' ? { ...old, none: 0, redo: 1 } : { m: 'road', a: this.pts[i - 1].ll, b: this.pts[i].ll }) : { m: 'fly' };
     await Vault.saveGeo(); this.build(); this.update(); this.panel();
     if (m === 'road') { if (navigator.onLine) this.fetchPending(); else toast('Saved. The road route is drawn when you have signal'); }
   },
