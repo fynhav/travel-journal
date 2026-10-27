@@ -291,7 +291,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.20'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.21'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1457,6 +1457,13 @@ function simplify(c, tol) { // Douglas–Peucker on [lat, lon] points, so a long
   while (st.length) { const [s, e] = st.pop(); let md = 0, mi = -1; for (let i = s + 1; i < e; i++) { const d = dist(c[i], c[s], c[e]); if (d > md) { md = d; mi = i; } } if (mi > 0 && md > tol) { keep[mi] = 1; st.push([s, mi], [mi, e]); } }
   return c.filter((_, i) => keep[i]);
 }
+function smoothD(P) { // a line through the points, with the corners rounded off
+  const f = q => q[0].toFixed(2) + ' ' + q[1].toFixed(2), n = P.length; let d = 'M' + f(P[0]);
+  if (n < 3) return d + 'L' + f(P[n - 1]);
+  d += 'L' + f([(P[0][0] + P[1][0]) / 2, (P[0][1] + P[1][1]) / 2]);
+  for (let i = 1; i < n - 1; i++) d += 'Q' + f(P[i]) + ' ' + f([(P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2]);
+  return d + 'L' + f(P[n - 1]);
+}
 function dec6(t) { // Valhalla's encoded line (polyline, 6 decimals) to [lat, lon] points
   let i = 0, la = 0, lo = 0; const o = [];
   while (i < t.length) {
@@ -1617,7 +1624,7 @@ const MapV = {
     let road = '', str = '', all = '';
     for (let i = 1; i <= upTo && i < this.pts.length; i++) {
       const a = this.pts[i - 1], b = this.pts[i], g = this.geom(i), m = 'M' + a.x.toFixed(1) + ' ' + a.y.toFixed(1);
-      const seg = m + (g ? g.map(q => 'L' + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('') : '') + 'L' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
+      const seg = g ? smoothD([[a.x, a.y], ...g, [b.x, b.y]]) : m + 'L' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
       all += seg; if (g) road += seg; else str += seg;
     }
     return { road, str, all };
@@ -1646,7 +1653,7 @@ const MapV = {
           const old = this.rec(i), via = (old && old.via) || [], x = await roadRoute(a.ll, b.ll, via);
           if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll, ...(via.length ? { via } : {}) };
           else {
-            let c = x.c, tol = .0005; while (c.length > 500 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
+            let c = x.c, tol = .0003; while (c.length > 700 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
             this.lastErr = ''; Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, ...(via.length ? { via } : {}), p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
           }
           await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel();
@@ -1705,6 +1712,13 @@ const MapV = {
     const up = ev => {
       if (!this.ptr.has(ev.pointerId)) return; this.ptr.delete(ev.pointerId);
       if (this.drag && this.drag.moved < 8 && !this.ptr.size && (this.placing || this.via)) this.dropPin(pos(ev));
+      else if (this.drag && this.drag.moved < 8 && !this.ptr.size) { // double tap: zoom in on that spot
+        const p = pos(ev), now = Date.now(), L = this.lastTap;
+        if (L && now - L.t < 340 && Math.hypot(p[0] - L.p[0], p[1] - L.p[1]) < 32) {
+          this.lastTap = null; const v = this.vb, w = Math.max(.6 * PS, v.w / 2), k = v.w / this.W, ax = v.x + p[0] * k, ay = v.y + p[1] * k, k2 = w / this.W;
+          this.auto = false; this.goto(ax - p[0] * k2 + w / 2, ay - p[1] * k2 + w * this.H / this.W / 2, w, 260);
+        } else this.lastTap = { t: now, p };
+      }
       if (!this.ptr.size) this.drag = null;
     };
     box.onpointerup = up; box.onpointercancel = up;
@@ -1744,7 +1758,7 @@ const mapHTML = () => `<div class="mapscreen">
   <div class="mapcard" id="mapcard"></div></div>`;
 
 // ---------- events ----------
-// no zoom: double-tap is handled by touch-action in the CSS, pinch by these
+// no page zoom: double-tap is blocked by touch-action in the CSS (the map does its own double-tap zoom), pinch by these
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, ev => ev.preventDefault()));
 document.addEventListener('click', async ev => {
   const mp = ev.target.closest('.mp'); if (mp) { MapV.go(+mp.dataset.i); return; }
