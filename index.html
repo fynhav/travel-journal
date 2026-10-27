@@ -289,7 +289,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.14'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.15'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1454,6 +1454,34 @@ function simplify(c, tol) { // Douglas–Peucker on [lat, lon] points, so a long
   while (st.length) { const [s, e] = st.pop(); let md = 0, mi = -1; for (let i = s + 1; i < e; i++) { const d = dist(c[i], c[s], c[e]); if (d > md) { md = d; mi = i; } } if (mi > 0 && md > tol) { keep[mi] = 1; st.push([s, mi], [mi, e]); } }
   return c.filter((_, i) => keep[i]);
 }
+function dec6(t) { // Valhalla's encoded line (polyline, 6 decimals) to [lat, lon] points
+  let i = 0, la = 0, lo = 0; const o = [];
+  while (i < t.length) {
+    for (let k = 0; k < 2; k++) { let b, sh = 0, r = 0; do { b = t.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32); const d = r & 1 ? ~(r >> 1) : r >> 1; if (k) lo += d; else la += d; }
+    o.push([la / 1e6, lo / 1e6]);
+  }
+  return o;
+}
+// Ask for a route that sticks to the main roads. First choice is Valhalla (set to favour highways and avoid tracks);
+// if that is unreachable, OSRM, picking whichever of its alternatives uses the most numbered highways.
+async function roadRoute(a, b) {
+  try {
+    const q = { locations: [{ lat: a[0], lon: a[1] }, { lat: b[0], lon: b[1] }], costing: 'auto', costing_options: { auto: { use_highways: 1, use_tolls: 1, use_trails: 0, use_living_streets: 0, use_ferry: 0.3 } }, directions_options: { units: 'kilometers' } };
+    const r = await fetch('https://valhalla1.openstreetmap.de/route?json=' + encodeURIComponent(JSON.stringify(q)));
+    if (r.ok) { const j = await r.json(), l = j.trip && j.trip.legs; if (l && l.length) return { c: l.flatMap(x => dec6(x.shape)), km: Math.round(j.trip.summary.length), src: 'valhalla' }; }
+  } catch {}
+  const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a[1]},${a[0]};${b[1]},${b[0]}?overview=full&geometries=geojson&steps=true&alternatives=3`);
+  if (!r.ok) throw new Error('busy');
+  const j = await r.json(); if (!j.routes || !j.routes.length) { if (j.code === 'NoRoute') return 'none'; throw new Error('bad'); }
+  const fast = Math.min(...j.routes.map(x => x.duration)); let best = null, bs = -9;
+  for (const x of j.routes) {
+    if (x.duration > fast * 1.4) continue;
+    let main = 0, all = 0; for (const l of x.legs) for (const st of l.steps) { all += st.distance; if (st.ref) main += st.distance; }
+    const sc = (all ? main / all : 0) - (x.duration / fast - 1) * .5; if (sc > bs) { bs = sc; best = x; }
+  }
+  best ||= j.routes[0];
+  return { c: best.geometry.coordinates.map(q => [q[1], q[0]]), km: Math.round(best.distance / 1000), src: 'osrm' };
+}
 const MapV = {
   world: null, alive: false, auto: true, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
   destroy() { this.ro?.disconnect(); this.alive = false; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); this.ptr.clear(); },
@@ -1569,7 +1597,7 @@ const MapV = {
     if (!r._x) { const x = []; for (let k = 0; k + 1 < r.p.length; k += 2) x.push([mx(r.p[k + 1]), my(r.p[k])]); Object.defineProperty(r, '_x', { value: x, writable: true, configurable: true, enumerable: false }); }
     return r._x;
   },
-  needs(i) { const r = this.rec(i); return !!r && r.m === 'road' && !r.none && (!r.p || this.stale(i, r)); },
+  needs(i) { const r = this.rec(i); return !!r && r.m === 'road' && !r.none && (!r.p || r.v !== 2 || this.stale(i, r)); },
   legPaths(upTo) {
     let road = '', str = '', all = '';
     for (let i = 1; i <= upTo && i < this.pts.length; i++) {
@@ -1582,8 +1610,8 @@ const MapV = {
   legRow() {
     const i = this.idx; if (i < 1 || !this.pts[i]) return '';
     const r = this.rec(i), road = !!r && r.m === 'road', a = this.pts[i - 1];
-    let st = 'Straight line. Choose Drove to follow the real road.';
-    if (road) st = this.geom(i) ? `Following the road · ${r.km} km` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
+    let st = 'Straight line. Choose Drove to follow the main roads.';
+    if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
     else if (r) st = 'Straight line, like a flight.';
     return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div></div>`;
   },
@@ -1600,16 +1628,14 @@ const MapV = {
         if (!this.needs(i)) continue;
         const a = this.pts[i - 1], b = this.pts[i], k = this.lk(i);
         try {
-          const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.ll[1]},${a.ll[0]};${b.ll[1]},${b.ll[0]}?overview=full&geometries=geojson`);
-          if (!r.ok) { toast('The route service is busy. It will try again later'); break; }
-          const j = await r.json(), rt = j.routes && j.routes[0];
-          if (!rt) { if (j.code === 'NoRoute') Vault.geo[k] = { m: 'road', none: 1, a: a.ll, b: b.ll }; else break; }
+          const x = await roadRoute(a.ll, b.ll);
+          if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll };
           else {
-            let c = rt.geometry.coordinates.map(q => [q[1], q[0]]), tol = .0006; while (c.length > 450 && tol < 1) { c = simplify(rt.geometry.coordinates.map(q => [q[1], q[0]]), tol); tol *= 1.7; }
-            Vault.geo[k] = { m: 'road', km: Math.round(rt.distance / 1000), a: a.ll, b: b.ll, p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
+            let c = x.c, tol = .0005; while (c.length > 500 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
+            Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
           }
           await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel();
-        } catch { break; } // no signal after all: try again next time
+        } catch { toast('The route service is busy. It will try again later'); break; } // no signal or busy: try again next time
         await new Promise(r => setTimeout(r, 1100));
       }
     } finally { this.fbusy = false; }
