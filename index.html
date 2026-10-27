@@ -217,6 +217,11 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .mp{position:absolute;left:0;top:0;width:28px;height:28px;border:0;background:none;padding:0;pointer-events:auto;cursor:pointer;will-change:transform}
 .mp i{position:absolute;inset:0;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:12px;font-style:normal;text-align:center;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(80,50,20,.35);box-sizing:border-box;line-height:23px}
 .mp.fut i{background:#fff;color:var(--accent);border-color:#E7C9B6}
+.mp.plan i{background:#3F8F8B}
+.mp.plan.fut i{background:#fff;color:#3F8F8B;border-color:#BBD9D6}
+.mp.plan.sel i{box-shadow:0 0 0 6px rgba(63,143,139,.25),0 3px 10px rgba(30,70,70,.4)}
+.mp.plan.foc:not(.sel) i{box-shadow:0 0 0 4px rgba(63,143,139,.22),0 2px 8px rgba(30,70,70,.3)}
+.mplan{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:9px;background:#DCEEEC;color:#2D6E6A;font-size:11px;font-weight:700;vertical-align:1px}
 .mp.sel{z-index:3}
 .mp.sel i{transform:scale(1.3);box-shadow:0 0 0 6px rgba(181,86,47,.22),0 3px 10px rgba(80,50,20,.4)}
 .mp.foc:not(.sel) i{box-shadow:0 0 0 4px rgba(181,86,47,.2),0 2px 8px rgba(80,50,20,.3)}
@@ -291,7 +296,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.21'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.22'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1478,8 +1483,10 @@ async function roadRoute(a, b, via = []) {
   const errs = [], pts = [a, ...via, b];
   const osrm = async (base, rich, tag) => {
     const r = await fetch(`${base}/route/v1/driving/${pts.map(q => q[1] + ',' + q[0]).join(';')}?overview=full&geometries=geojson${rich ? '&steps=true' + (via.length ? '' : '&alternatives=3') : ''}`);
-    if (!r.ok) throw new Error(tag + ' ' + r.status);
-    const j = await r.json(); if (!j.routes || !j.routes.length) { if (j.code === 'NoRoute') return 'none'; throw new Error(tag + ' ' + (j.code || 'no answer')); }
+    let j = null; try { j = await r.json(); } catch {}
+    if (j && j.code === 'NoRoute') return 'none'; // OSRM answers 400 when no road connects the two places
+    if (!r.ok || !j) throw new Error(tag + ' ' + r.status);
+    if (!j.routes || !j.routes.length) { if (j.code === 'NoRoute') return 'none'; throw new Error(tag + ' ' + (j.code || 'no answer')); }
     const fast = Math.min(...j.routes.map(x => x.duration)); let best = null, bs = -9;
     for (const x of j.routes) {
       if (x.duration > fast * 1.4) continue;
@@ -1590,7 +1597,7 @@ const MapV = {
   update() {
     const svg = $('#mapsvg'); if (!svg || !this.vb) return; const v = this.vb;
     svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
-    const k = this.W / v.w, f = S.mapFocus, rects = [], order = this.pts.map((_, i) => i).sort((a, b) => (b === this.idx) - (a === this.idx) || this.pts[b].days - this.pts[a].days);
+    const today = iso(new Date()), k = this.W / v.w, f = S.mapFocus, rects = [], order = this.pts.map((_, i) => i).sort((a, b) => (b === this.idx) - (a === this.idx) || this.pts[b].days - this.pts[a].days);
     const els = $$('#mappins .mp'), done = new Array(els.length);
     for (const i of order) {
       const p = this.pts[i], el = els[i]; if (!el) continue;
@@ -1598,7 +1605,7 @@ const MapV = {
       el.style.display = out ? 'none' : '';
       if (out) continue;
       el.style.transform = `translate(${sx - 14}px,${sy - 14}px)`;
-      el.className = 'mp' + (i === this.idx ? ' sel' : i < this.idx ? ' past' : ' fut') + (f && p.eids.has(f) ? ' foc' : '');
+      el.className = 'mp' + (p.start > today ? ' plan' : '') + (i === this.idx ? ' sel' : i < this.idx ? ' past' : ' fut') + (f && p.eids.has(f) ? ' foc' : '');
       const w = Math.min(130, p.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
       const clash = rects.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0) || sx + 16 + w > this.W + 4;
       el.classList.toggle('nolab', (clash || sx < 10) && i !== this.idx);
@@ -1651,6 +1658,7 @@ const MapV = {
         const a = this.pts[i - 1], b = this.pts[i], k = this.lk(i);
         try {
           const old = this.rec(i), via = (old && old.via) || [], x = await roadRoute(a.ll, b.ll, via);
+          if (x === 'none') this.lastErr = '';
           if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll, ...(via.length ? { via } : {}) };
           else {
             let c = x.c, tol = .0003; while (c.length > 700 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
@@ -1676,7 +1684,7 @@ const MapV = {
     if (!P.length) { c.innerHTML = `${stats}<p class="hint" style="margin:10px 0 0">${A.length ? 'None of your places are on the map yet. Tap “Place them” above to find or drop them.' : 'Add a place to a day in a chapter and it shows up here.'}</p>`; this.note(miss); return; }
     const p = P[this.idx];
     c.innerHTML = `${stats}
-      <div class="mstop"><div style="min-width:0;flex:1"><b>${this.idx + 1}. ${esc(p.place)}</b><small>${flagOf(p.country)} ${esc(p.country || '')} · ${rangeLabel(p.start, p.end)}${p.days > 1 ? ' · ' + p.days + ' days' : ''}</small></div><button class="btn small" data-act="map-move">Move pin</button><button class="btn small pri" data-act="map-open" data-id="${p.eid}">Chapter</button></div>
+      <div class="mstop"><div style="min-width:0;flex:1"><b>${this.idx + 1}. ${esc(p.place)}</b><small>${flagOf(p.country)} ${esc(p.country || '')} · ${rangeLabel(p.start, p.end)}${p.days > 1 ? ' · ' + p.days + ' days' : ''}${p.start > iso(new Date()) ? '<span class="mplan">Planned</span>' : ''}</small></div><button class="btn small" data-act="map-move">Move pin</button><button class="btn small pri" data-act="map-open" data-id="${p.eid}">Chapter</button></div>
       ${this.legRow()}
       <div class="mctl"><button class="circ" data-act="map-play" aria-label="${this.timer ? 'Pause' : 'Play the journey'}">${ico(this.timer ? 'pause' : 'play', 20, '#B5562F', 2.2)}</button><div style="flex:1;min-width:0"><input type="range" id="mapidx" min="0" max="${Math.max(0, P.length - 1)}" value="${this.idx}" aria-label="Move through the trip"><div class="mdates"><span>${fmt(P[0].start, SHORT)}</span><span>${fmt(P[P.length - 1].end, SHORT)}</span></div></div></div>`;
     this.note(miss);
