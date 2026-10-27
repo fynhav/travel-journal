@@ -290,7 +290,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.18'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.19'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1046,7 +1046,8 @@ async function addPhotos(files, e) {
     } catch { bad++; }
   }
   rerender();
-  toast(bad ? `${bad} photo${bad > 1 ? 's' : ''} couldn't be read` : 'Photos added');
+  if (bad) { const s2 = bad > 1 ? 's' : ''; toast(navigator.onLine ? `${bad} photo${s2} couldn't be read. Try adding ${bad > 1 ? 'them' : 'it'} again` : `${bad} photo${s2} couldn't be read. If ${bad > 1 ? 'they are' : 'it is'} still in iCloud, add ${bad > 1 ? 'them' : 'it'} again once you have signal`); }
+  else toast('Photos added');
 }
 
 async function smartQuestions(e, btn) {
