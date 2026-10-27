@@ -290,7 +290,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.17'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.18'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1466,22 +1466,34 @@ function dec6(t) { // Valhalla's encoded line (polyline, 6 decimals) to [lat, lo
 // Ask for a route that sticks to the main roads. First choice is Valhalla (set to favour highways and avoid tracks);
 // if that is unreachable, OSRM, picking whichever of its alternatives uses the most numbered highways.
 async function roadRoute(a, b, via = []) {
-  try {
-    const q = { locations: [{ lat: a[0], lon: a[1] }, ...via.map(v => ({ lat: v[0], lon: v[1], type: 'through' })), { lat: b[0], lon: b[1] }], costing: 'auto', costing_options: { auto: { use_highways: 1, use_tolls: 1, use_trails: 0, use_living_streets: 0, use_ferry: 0.3 } }, directions_options: { units: 'kilometers' } };
-    const r = await fetch('https://valhalla1.openstreetmap.de/route?json=' + encodeURIComponent(JSON.stringify(q)));
-    if (r.ok) { const j = await r.json(), l = j.trip && j.trip.legs; if (l && l.length) return { c: l.flatMap(x => dec6(x.shape)), km: Math.round(j.trip.summary.length), src: 'valhalla' }; }
-  } catch {}
-  const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${[a, ...via, b].map(q => q[1] + ',' + q[0]).join(';')}?overview=full&geometries=geojson&steps=true${via.length ? '' : '&alternatives=3'}`);
-  if (!r.ok) throw new Error('busy');
-  const j = await r.json(); if (!j.routes || !j.routes.length) { if (j.code === 'NoRoute') return 'none'; throw new Error('bad'); }
-  const fast = Math.min(...j.routes.map(x => x.duration)); let best = null, bs = -9;
-  for (const x of j.routes) {
-    if (x.duration > fast * 1.4) continue;
-    let main = 0, all = 0; for (const l of x.legs) for (const st of l.steps) { all += st.distance; if (st.ref) main += st.distance; }
-    const sc = (all ? main / all : 0) - (x.duration / fast - 1) * .5; if (sc > bs) { bs = sc; best = x; }
-  }
-  best ||= j.routes[0];
-  return { c: best.geometry.coordinates.map(q => [q[1], q[0]]), km: Math.round(best.distance / 1000), src: 'osrm' };
+  const errs = [], pts = [a, ...via, b];
+  const osrm = async (base, rich, tag) => {
+    const r = await fetch(`${base}/route/v1/driving/${pts.map(q => q[1] + ',' + q[0]).join(';')}?overview=full&geometries=geojson${rich ? '&steps=true' + (via.length ? '' : '&alternatives=3') : ''}`);
+    if (!r.ok) throw new Error(tag + ' ' + r.status);
+    const j = await r.json(); if (!j.routes || !j.routes.length) { if (j.code === 'NoRoute') return 'none'; throw new Error(tag + ' ' + (j.code || 'no answer')); }
+    const fast = Math.min(...j.routes.map(x => x.duration)); let best = null, bs = -9;
+    for (const x of j.routes) {
+      if (x.duration > fast * 1.4) continue;
+      let main = 0, all = 0; for (const l of x.legs || []) for (const st of l.steps || []) { all += st.distance; if (st.ref) main += st.distance; }
+      const sc = (all ? main / all : 0) - (x.duration / fast - 1) * .5; if (sc > bs) { bs = sc; best = x; }
+    }
+    best ||= j.routes[0];
+    return { c: best.geometry.coordinates.map(q => [q[1], q[0]]), km: Math.round(best.distance / 1000), src: tag };
+  };
+  const tries = [
+    async () => { // Valhalla, set to favour highways and avoid tracks
+      const q = { locations: [{ lat: a[0], lon: a[1] }, ...via.map(v => ({ lat: v[0], lon: v[1], type: 'through' })), { lat: b[0], lon: b[1] }], costing: 'auto', costing_options: { auto: { use_highways: 1, use_tolls: 1, use_ferry: 0.3 } } };
+      const r = await fetch('https://valhalla1.openstreetmap.de/route?json=' + encodeURIComponent(JSON.stringify(q)));
+      if (!r.ok) throw new Error('valhalla ' + r.status);
+      const j = await r.json(), l = j.trip && j.trip.legs; if (!l || !l.length) throw new Error('valhalla no answer');
+      return { c: l.flatMap(x => dec6(x.shape)), km: Math.round(j.trip.summary.length), src: 'valhalla' };
+    },
+    () => osrm('https://routing.openstreetmap.de/routed-car', true, 'osm.de'),
+    () => osrm('https://router.project-osrm.org', true, 'osrm'),
+    () => osrm('https://router.project-osrm.org', false, 'osrm-lite')
+  ];
+  for (const t of tries) { try { return await t(); } catch (e) { errs.push(String(e && e.message || e).slice(0, 40)); } }
+  throw new Error(errs.join(', '));
 }
 const MapV = {
   world: null, alive: false, auto: true, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
@@ -1612,7 +1624,7 @@ const MapV = {
     const i = this.idx; if (i < 1 || !this.pts[i]) return '';
     const r = this.rec(i), road = !!r && r.m === 'road', a = this.pts[i - 1];
     let st = 'Straight line. Choose Drove to follow the main roads.';
-    if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km. Tap Drove again to redo it.` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? 'Finding the road route…' : 'The route is drawn when you next have signal.';
+    if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km. Tap Drove again to redo it.` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? (this.lastErr ? `Couldn’t get the route (${esc(this.lastErr)}). Tap Drove to try again.` : 'Finding the road route…') : 'The route is drawn when you next have signal.';
     else if (r) st = 'Straight line, like a flight.';
     return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div>${road ? `<div class="mvia"><button class="btn small" data-act="leg-via">＋ Route via a point</button>${r.via && r.via.length ? `<button class="btn small" data-act="leg-via-clear">Clear ${r.via.length} point${r.via.length > 1 ? 's' : ''}</button>` : ''}</div>` : ''}</div>`;
   },
@@ -1633,10 +1645,10 @@ const MapV = {
           if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll, ...(via.length ? { via } : {}) };
           else {
             let c = x.c, tol = .0005; while (c.length > 500 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
-            Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, ...(via.length ? { via } : {}), p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
+            this.lastErr = ''; Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, ...(via.length ? { via } : {}), p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
           }
           await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel();
-        } catch { toast('The route service is busy. It will try again later'); break; } // no signal or busy: try again next time
+        } catch (e) { this.lastErr = String(e && e.message || e).slice(0, 80); toast('Couldn’t get the route: ' + this.lastErr); this.panel(); break; } // no signal or busy: try again next time
         await new Promise(r => setTimeout(r, 1100));
       }
     } finally { this.fbusy = false; }
