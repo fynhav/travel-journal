@@ -280,7 +280,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.11'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.12'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -618,6 +618,7 @@ const IC = {
   back: '<path d="M15 6l-6 6 6 6"/>', next: '<path d="M9 6l6 6-6 6"/>',
   cal: '<rect x="4" y="5" width="16" height="15" rx="3.5"/><path d="M4 10h16M8 3v4M16 3v4"/>',
   list: '<path d="M9 7h11M9 12h11M9 17h11"/><circle cx="4.5" cy="7" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="17" r=".6"/>',
+  pen: '<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0 0-3l-1-1a2.1 2.1 0 0 0-3 0L4 16z"/><path d="M13.5 6.5l4 4"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   book: '<path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v15H7.5A2.5 2.5 0 0 0 5 20.5z"/><path d="M5 20.5A2.5 2.5 0 0 0 7.5 23H19v-5"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
@@ -653,7 +654,7 @@ function cover(e) {
 const navHTML = a => `<nav class="nav" aria-label="Main">
   <button class="nv${a === 'cal' ? ' on' : ''}" data-act="nav" data-v="cal" aria-label="Calendar">${ico('cal')}</button>
   <button class="nv${a === 'chapters' ? ' on' : ''}" data-act="nav" data-v="chapters" aria-label="Chapters">${ico('list')}</button>
-  <button class="micfab" data-act="quick-rec" aria-label="Record a voice note">${ico('mic', 24, '#fff')}</button>
+  <button class="micfab" data-act="current" aria-label="Open the current chapter">${ico('pen', 24, '#fff', 2.1)}</button>
   <button class="nv" data-act="map" aria-label="Trip map">${ico('map')}</button>
   <button class="nv${a === 'book' ? ' on' : ''}" data-act="nav" data-v="book" aria-label="Book">${ico('book')}</button>
   <button class="nv" data-act="settings" aria-label="Settings">${ico('gear')}</button></nav>`;
@@ -1501,10 +1502,17 @@ const MapV = {
     } else { cx = mx(-75); cy = my(5); w = 40 * PS; }
     this.fitW = w; this.goto(cx, cy, w, anim ? 700 : 0);
   },
+  // the world has an edge: never let the view slide off into empty space
+  lim() { const y0 = my(80), y1 = my(-58), x0 = -180 * PS, x1 = 190 * PS; return { x0, x1, y0, y1, maxW: Math.min(x1 - x0, (y1 - y0) * this.W / this.H) }; },
+  clampVb(v) {
+    const L = this.lim(); let w = Math.max(.6 * PS, Math.min(L.maxW, v.w)), h = w * this.H / this.W, x = v.x, y = v.y;
+    x = Math.max(L.x0, Math.min(L.x1 - w, x)); y = Math.max(L.y0, Math.min(L.y1 - h, y));
+    return { x, y, w, h };
+  },
   goto(cx, cy, w, ms) {
-    w = Math.max(.6 * PS, Math.min(360 * PS, w)); cancelAnimationFrame(this.cam);
+    w = Math.max(.6 * PS, Math.min(this.lim().maxW, w)); cancelAnimationFrame(this.cam);
     const v0 = this.vb ? { cx: this.vb.x + this.vb.w / 2, cy: this.vb.y + this.vb.h / 2, w: this.vb.w } : null;
-    const set = (a, b, c) => { this.vb = { x: a - c / 2, y: b - c * this.H / this.W / 2, w: c, h: c * this.H / this.W }; this.update(); };
+    const set = (a, b, c) => { this.vb = this.clampVb({ x: a - c / 2, y: b - c * this.H / this.W / 2, w: c }); this.update(); };
     if (!ms || !v0) { set(cx, cy, w); return; }
     const t0 = performance.now(), lw0 = Math.log(v0.w), lw1 = Math.log(w);
     const step = t => { const k = Math.min(1, (t - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; set(v0.cx + (cx - v0.cx) * e, v0.cy + (cy - v0.cy) * e, Math.exp(lw0 + (lw1 - lw0) * e)); if (k < 1 && this.alive) this.cam = requestAnimationFrame(step); };
@@ -1571,15 +1579,15 @@ const MapV = {
   zoom(f, sx, sy) {
     const v = this.vb; if (!v) return; cancelAnimationFrame(this.cam); this.auto = false;
     sx ??= this.W / 2; sy ??= this.H / 2;
-    const w = Math.max(.6 * PS, Math.min(360 * PS, v.w / f)), k = w / this.W, ax = v.x + sx / this.W * v.w, ay = v.y + sy / this.H * v.h;
-    this.vb = { x: ax - sx * k, y: ay - sy * k, w, h: w * this.H / this.W }; this.update();
+    const w = Math.max(.6 * PS, Math.min(this.lim().maxW, v.w / f)), k = w / this.W, ax = v.x + sx / this.W * v.w, ay = v.y + sy / this.H * v.h;
+    this.vb = this.clampVb({ x: ax - sx * k, y: ay - sy * k, w }); this.update();
   },
   bind(box) {
     const pos = ev => { const r = box.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
     box.onpointerdown = ev => { if (ev.target.closest('.mp,.mapctl,#mapnote,button')) return; this.auto = false; box.setPointerCapture(ev.pointerId); this.ptr.set(ev.pointerId, pos(ev)); this.drag = { moved: 0, start: pos(ev) }; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); };
     box.onpointermove = ev => {
       if (!this.ptr.has(ev.pointerId)) return; const old = this.ptr.get(ev.pointerId), now = pos(ev), v = this.vb; this.ptr.set(ev.pointerId, now);
-      if (this.ptr.size === 1) { this.drag.moved += Math.abs(now[0] - old[0]) + Math.abs(now[1] - old[1]); const k = v.w / this.W; this.vb = { ...v, x: v.x - (now[0] - old[0]) * k, y: v.y - (now[1] - old[1]) * k }; this.update(); }
+      if (this.ptr.size === 1) { this.drag.moved += Math.abs(now[0] - old[0]) + Math.abs(now[1] - old[1]); const k = v.w / this.W; this.vb = this.clampVb({ ...v, x: v.x - (now[0] - old[0]) * k, y: v.y - (now[1] - old[1]) * k }); this.update(); }
       else if (this.ptr.size === 2) {
         const o = [...this.ptr.entries()].map(([id, p]) => id === ev.pointerId ? old : p), n = [...this.ptr.values()];
         const d0 = Math.hypot(o[0][0] - o[1][0], o[0][1] - o[1][1]) || 1, d1 = Math.hypot(n[0][0] - n[1][0], n[0][1] - n[1][1]);
@@ -1677,10 +1685,11 @@ document.addEventListener('click', async ev => {
     case 'del-entry-close': closeSheet(); document.querySelector('[data-act="del-entry"]') ? 0 : 0; await delEntry(e); break;
     case 'send-pick': openSheet(`<h3>Send which chapter?</h3><div class="stack">${chapters().map(x => `<button class="btn" data-act="send-ch" data-id="${x.id}">Chapter ${chapterNo(x)}${chTitle(x) ? ': ' + esc(chTitle(x)) : ''}</button>`).join('') || '<p class="hint">No chapters yet.</p>'}<button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
     case 'send-ch': { closeSheet(); const x = S.entries.find(y => y.id === t.dataset.id); if (x) shareChapter(x); break; }
-    case 'quick-rec': {
-      const today = iso(new Date()), x = entryOn(today);
-      if (!x) { daySheet(today); toast('Start today’s chapter first, then record'); break; }
-      openEntry(x.id); startRec(x, nextTarget(x)); break;
+    case 'current': {
+      flush(); const today = iso(new Date()), list = chapters();
+      const x = entryOn(today) || [...list].reverse().find(c => c.end <= today) || list[list.length - 1];
+      if (x) { S.view = 'entry'; openEntry(x.id); } else daySheet(today);
+      break;
     }
     case 'rec-next': startRec(e, nextTarget(e)); break;
     case 'rec-rescue': if (Rec.rescue) await shareOrDownload([new File([Rec.rescue], 'voice-note.' + (/mp4/.test(Rec.rescue.type) ? 'm4a' : /ogg/.test(Rec.rescue.type) ? 'ogg' : 'webm'), { type: Rec.rescue.type })], 'Voice note'); break;
