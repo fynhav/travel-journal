@@ -194,6 +194,46 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .steps small{display:block;font-size:12px;line-height:1.4;color:#6B5F50;margin-top:2px}
 .steps .ln{width:2px;height:12px;background:#EADFC9;margin:2px 0 2px 14px}
 .offnote{display:flex;align-items:center;gap:12px;background:var(--band);border-radius:20px;padding:12px 16px;margin:12px 16px 24px;font-size:12.5px;line-height:1.4;color:#4A4036}
+/* trip map */
+.mapscreen{position:fixed;inset:0;display:flex;flex-direction:column;background:var(--paper);z-index:5}
+.mapscreen .top{position:relative}
+#mapbox{flex:1;min-height:0;position:relative;overflow:hidden;background:#DCE8E6;touch-action:none;user-select:none;-webkit-user-select:none}
+#mapsvg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.ld{fill:#FBF6EA;stroke:#D9CCB0;stroke-width:.8;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+.ld.vis{stroke-width:1.1}
+.rt0{stroke:#B5562F;stroke-opacity:.38;stroke-width:2.5;stroke-dasharray:2 7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.rt1{stroke:#B5562F;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+#mappins{position:absolute;inset:0;pointer-events:none}
+.mp{position:absolute;left:0;top:0;width:28px;height:28px;border:0;background:none;padding:0;pointer-events:auto;cursor:pointer;will-change:transform}
+.mp i{position:absolute;inset:0;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:12px;font-style:normal;text-align:center;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(80,50,20,.35);box-sizing:border-box;line-height:23px}
+.mp.fut i{background:#fff;color:var(--accent);border-color:#E7C9B6}
+.mp.sel{z-index:3}
+.mp.sel i{transform:scale(1.3);box-shadow:0 0 0 6px rgba(181,86,47,.22),0 3px 10px rgba(80,50,20,.4)}
+.mp.foc:not(.sel) i{box-shadow:0 0 0 4px rgba(181,86,47,.2),0 2px 8px rgba(80,50,20,.3)}
+.mp .ml{position:absolute;left:32px;top:50%;transform:translateY(-50%);white-space:nowrap;font-weight:700;font-size:11.5px;line-height:1;color:#2E2823;background:rgba(255,253,248,.92);border-radius:9px;padding:4px 7px;max-width:130px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 4px rgba(80,50,20,.18)}
+.mp.nolab .ml{display:none}
+.mp.fut .ml{opacity:.7}
+#mapnote{position:absolute;left:12px;right:70px;top:12px;pointer-events:none}
+#mapnote > *{pointer-events:auto}
+.mchip{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:18px;background:rgba(255,253,248,.96);padding:9px 14px;font-weight:700;font-size:12.5px;line-height:1.2;color:#8A2B16;box-shadow:0 3px 12px rgba(80,50,20,.18);cursor:pointer;text-align:left}
+.mchip.on{color:var(--ink);cursor:default}
+.mchip button{border:0;background:none;color:var(--accent);font-weight:800;font-size:12.5px;padding:0 0 0 4px;cursor:pointer}
+.mapctl{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:8px}
+.mapcard{background:var(--card);border-radius:28px 28px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);box-shadow:0 -6px 24px rgba(120,90,50,.14);margin-top:-22px;position:relative;z-index:6}
+.mstats{display:flex;justify-content:space-between;gap:6px}
+.mstats div{flex:1;text-align:center}
+.mstats b{display:block;font:600 22px/1.1 var(--serif)}
+.mstats span{display:block;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.mstop{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #F0E8D8}
+.mstop b{display:block;font:600 17px/1.25 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mstop small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.mctl{display:flex;align-items:center;gap:12px;margin-top:12px}
+.mctl .circ{width:46px;height:46px;border:0;flex:none;cursor:pointer;padding:0}
+.mctl input[type=range]{width:100%;padding:0;border:0;background:none;accent-color:var(--accent);margin:0;display:block}
+.mdates{display:flex;justify-content:space-between;font-size:11px;font-weight:600;color:var(--muted);margin-top:2px}
+.mapcta{display:flex;align-items:center;gap:12px;width:100%;border:1px solid #F0E8D8;background:var(--card);border-radius:24px;padding:12px 16px;margin-top:12px;box-shadow:0 4px 16px rgba(120,90,50,.07);cursor:pointer;font:inherit;color:inherit}
+.mapcta .ic{width:40px;height:40px;border-radius:50%;background:#F3E2CF;display:flex;align-items:center;justify-content:center;flex:none}
+.mapcta b{display:block;font-size:13.5px}.mapcta small{color:var(--muted);font-size:12px}
 #sheet{position:fixed;inset:0;z-index:50;display:none}
 #sheet.on{display:block}
 #sheet .bg{position:absolute;inset:0;background:rgba(46,40,35,.35)}
@@ -240,7 +280,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.7'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.8'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -280,7 +320,7 @@ function applyStd(e) {
   const keep = e.qa.filter(x => !stdStale(e, x)), std = STANDARD.map(q => keep.find(x => x.q === q) || { id: uid(), q, a: '', kind: 'std' });
   e.qa = [...std, ...keep.filter(x => !STANDARD.includes(x.q))];
 }
-const COUNTRIES = ['Argentina','Belize','Bolivia','Brazil','Chile','Colombia','Costa Rica','Cuba','Ecuador','El Salvador','Guatemala','Honduras','Mexico','Nicaragua','Panama','Paraguay','Peru','Uruguay','Venezuela','United States','United Kingdom','Netherlands','Spain','Portugal','France','Italy','Greece','South Africa'];
+const COUNTRIES = ['Argentina','Belize','Bolivia','Brazil','Chile','Colombia','Costa Rica','Cuba','Dominican Republic','Ecuador','El Salvador','Guatemala','Guyana','Haiti','Honduras','Jamaica','Mexico','Nicaragua','Panama','Paraguay','Peru','Puerto Rico','Suriname','Uruguay','Venezuela','United States','United Kingdom','Netherlands','Spain','Portugal','France','Italy','Greece','South Africa'];
 const CODES = Object.fromEntries('argentina:AR,belize:BZ,bolivia:BO,brazil:BR,brasil:BR,chile:CL,colombia:CO,costa rica:CR,cuba:CU,ecuador:EC,el salvador:SV,guatemala:GT,honduras:HN,mexico:MX,méxico:MX,nicaragua:NI,panama:PA,panamá:PA,paraguay:PY,peru:PE,perú:PE,uruguay:UY,venezuela:VE,guyana:GY,suriname:SR,french guiana:GF,united states:US,usa:US,us:US,united states of america:US,united kingdom:GB,uk:GB,england:GB,scotland:GB,wales:GB,ireland:IE,netherlands:NL,holland:NL,spain:ES,españa:ES,portugal:PT,france:FR,italy:IT,greece:GR,germany:DE,switzerland:CH,austria:AT,belgium:BE,canada:CA,australia:AU,new zealand:NZ,japan:JP,thailand:TH,vietnam:VN,indonesia:ID,india:IN,china:CN,south korea:KR,singapore:SG,malaysia:MY,philippines:PH,morocco:MA,egypt:EG,kenya:KE,tanzania:TZ,south africa:ZA,turkey:TR,croatia:HR,iceland:IS,norway:NO,sweden:SE,denmark:DK,finland:FI,poland:PL,czechia:CZ,czech republic:CZ,hungary:HU,dominican republic:DO,jamaica:JM,puerto rico:PR,haiti:HT,bahamas:BS,trinidad and tobago:TT,falkland islands:FK'.split(',').map(x => x.split(':')));
 // soft fill, text and outline colours; Colombia and Panama are fixed, neighbours get different ones
 const PAL = [{bg:'#F7E6B0',fg:'#4A370C',bd:'#C99A1E'},{bg:'#D5E3F1',fg:'#17375C',bd:'#5E86A8'},{bg:'#DCEBD3',fg:'#2F4F22',bd:'#6F9460'},{bg:'#F3D9D6',fg:'#5E2420',bd:'#B5615A'},{bg:'#E6DBEF',fg:'#42285C',bd:'#9A6A92'},{bg:'#CFE8E3',fg:'#164A41',bd:'#4F8C80'},{bg:'#F6DDC8',fg:'#5C3512',bd:'#C9784A'},{bg:'#E4E3D0',fg:'#3F4220',bd:'#8C8E52'}];
@@ -463,7 +503,7 @@ const Vault = {
     this.apiKey = '';
     const r = await DB.get('meta', 'apikey');
     if (r) this.apiKey = td.decode(await this.open(r));
-    await this.loadStt();
+    await this.loadStt(); await this.loadGeo();
     const old = lsGet('tj.key');
     if (old) { if (!this.apiKey) { this.apiKey = old; await this.saveApiKey(); } try { localStorage.removeItem('tj.key'); } catch {} }
   },
@@ -472,6 +512,12 @@ const Vault = {
     const r = await DB.get('meta', 'stt');
     if (r) try { Object.assign(this.stt, JSON.parse(td.decode(await this.open(r)))); } catch {}
   },
+  async loadGeo() {
+    this.geo = {};
+    const r = await DB.get('meta', 'geo');
+    if (r) try { this.geo = JSON.parse(td.decode(await this.open(r))) || {}; } catch {}
+  },
+  async saveGeo() { if (this.key && this.geo) await DB.putK('meta', await this.seal(te.encode(JSON.stringify(this.geo))), 'geo'); },
   async saveStt() { if (this.key && this.stt) await DB.putK('meta', await this.seal(te.encode(JSON.stringify(this.stt))), 'stt'); },
   async saveApiKey() {
     if (!this.key) return;
@@ -583,7 +629,10 @@ const IC = {
   text: '<path d="M4 8h16M4 12h10M4 16h13"/>',
   spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
   off: '<path d="M3 3l18 18M9.5 5.2A7 7 0 0 1 19 11.5a4.5 4.5 0 0 1 1.7 7M6.5 19A4.5 4.5 0 0 1 5 10.4"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>'
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  map: '<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/>',
+  play: '<path d="M8 5.5v13l11-6.5z"/>', pause: '<path d="M9 5.5v13M15 5.5v13"/>', minus: '<path d="M5 12h14"/>',
+  fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'
 };
 const ico = (n, sz = 22, c = 'currentColor', w = 2) => `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 
@@ -620,11 +669,12 @@ function notices() {
 
 function render() {
   if (Lock.locked) return;
-  const v = S.view;
-  $('#app').innerHTML = v === 'entry' && cur() ? entryHTML(cur()) : v === 'chapters' ? chaptersHTML() : v === 'book' ? bookHTML() : calHTML();
+  const v = S.view; MapV.destroy();
+  $('#app').innerHTML = v === 'entry' && cur() ? entryHTML(cur()) : v === 'chapters' ? chaptersHTML() : v === 'book' ? bookHTML() : v === 'map' ? mapHTML() : calHTML();
   $$('textarea').forEach(autosize);
   paintVoice();
   if (v === 'book') Store.refresh();
+  if (v === 'map') MapV.mount();
 }
 function rerender() { const y = scrollY; render(); scrollTo(0, y); }
 
@@ -754,7 +804,7 @@ function chapterRow(e) {
 }
 function chaptersHTML() {
   const list = chapters();
-  return `${topbar('South America', 'Chapters')}<div class="wrap">${notices()}${list.map(chapterRow).join('') || '<p class="hint">No chapters yet. Tap a day on the calendar to start one.</p>'}</div>${navHTML('chapters')}`;
+  return `${topbar('Latin America', 'Chapters')}<div class="wrap">${notices()}${list.map(chapterRow).join('') || '<p class="hint">No chapters yet. Tap a day on the calendar to start one.</p>'}</div>${navHTML('chapters')}`;
 }
 function bookHTML() {
   const list = chapters(), days = list.reduce((n, e) => n + daysBetween(e.start, e.end) + 1, 0), lastB = +lsGet('tj.lastBackup') || 0;
@@ -762,6 +812,7 @@ function bookHTML() {
   return `${topbar('Everything so far', 'Your book', offlineBadge())}<div class="wrap">${notices()}
     <div class="stats"><div class="stat"><b>${list.length}</b><span>chapter${list.length === 1 ? '' : 's'} so far</span></div><div class="stat"><b>${days}</b><span>day${days === 1 ? '' : 's'} written about</span></div></div>
     ${list.length ? `<div class="sb">Chapters</div><div class="bcards">${cards}</div>` : ''}
+    <button class="mapcta" data-act="map"><span class="ic">${ico('map', 22, '#B5562F')}</span><span style="flex:1;min-width:0;text-align:left"><b>Trip map</b><small>Your route through time</small></span>${ico('next', 18, '#7A6E60')}</button>
     <div class="tocard"><h3>Turn it into the book</h3><div style="font-size:12.5px;line-height:1.5;color:#4A4036">Send one chapter or the whole journal to Claude. It writes your memoir chapter by chapter, with your photos in place.</div><div class="btns"><button class="btn pri" data-act="send-pick">Send a chapter</button><button class="btn" data-act="export-book">Whole book</button></div></div>
     <div class="safe"><span class="ic">${ico('shield', 20, '#33502A')}</span><div style="flex:1;min-width:0"><b>Stored encrypted on this phone</b><small>${lastB ? 'Last iCloud backup ' + new Date(lastB).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'No iCloud backup yet'}</small></div><button class="btn small" data-act="backup" style="background:#F3E2CF;border-color:#F3E2CF;color:#8E3F1E">Back up</button></div>
     <div class="safe stor"><div style="flex:1;min-width:0"><b>Phone storage</b><div class="sbar"><i class="storeBar"></i></div><small class="storeLine">${esc(Store.text())}</small></div></div>
@@ -806,7 +857,7 @@ function entryHTML(e) {
   <div class="meta"><div style="flex:1;min-width:0"><div class="ml">${rangeLabel(e.start, e.end)} · ${days.length} day${days.length > 1 ? 's' : ''}</div><div class="ms">${mine.length ? esc(mine.join(' · ')) : 'No place yet'}</div></div><div class="prog"><div class="pt">${answered} of ${e.qa.length} answered</div><div class="pb"><i style="width:${pct}%"></i></div></div></div>
   <div class="tabs">${[['prompts', 'Prompts'], ['photos', 'Photos'], ['notes', 'Notes'], ['where', 'Where']].map(([k, l]) => `<button class="pill${tab === k ? ' on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div>
   <div class="wrap" style="padding-top:0">${body}</div>
-  <nav class="nav bar" aria-label="Chapter actions"><button class="recbtn" data-act="rec-next">${ico('mic', 20, '#fff', 2.2)}Record answer</button><label class="circ" aria-label="Add photos">${ico('img')}<input type="file" accept="image/*" multiple data-change="photos" hidden></label><button class="circ" data-act="share" aria-label="Send chapter to Claude">${ico('send')}</button></nav>`;
+  <nav class="nav bar" aria-label="Chapter actions"><button class="recbtn" data-act="rec-next">${ico('mic', 20, '#fff', 2.2)}Record answer</button><label class="circ" aria-label="Add photos">${ico('img')}<input type="file" accept="image/*" multiple data-change="photos" hidden></label><button class="circ" data-act="map" aria-label="Trip map">${ico('map')}</button><button class="circ" data-act="share" aria-label="Send chapter to Claude">${ico('send')}</button></nav>`;
 }
 
 // ---------- sheet ----------
@@ -1073,7 +1124,7 @@ async function backup() {
   for (const p of S.photos) { const { blob, ...rest } = p, buf = await blob.arrayBuffer(); pm.push({ ...rest, size: buf.byteLength }); parts.push(buf); }
   const am = [];
   for (const m of S.audio.filter(a => a.status !== 'recording')) { const buf = await (await getAudioBlob(m.id)).arrayBuffer(); am.push({ ...m, size: buf.byteLength }); parts.push(buf); }
-  const meta = te.encode(JSON.stringify({ entries: S.entries, photos: pm, audio: am, at: new Date().toISOString() }));
+  const meta = te.encode(JSON.stringify({ entries: S.entries, photos: pm, audio: am, geo: Vault.geo || {}, at: new Date().toISOString() }));
   const ml = new Uint8Array(4); new DataView(ml.buffer).setUint32(0, meta.length);
   const { iv, ct } = await Vault.seal(await new Blob([ml, meta, ...parts]).arrayBuffer());
   const header = te.encode(JSON.stringify({ v: 3, salt: b64e(Vault.salt), iter: Vault.iter, wrap: pack(Vault.rec.wrap), rwrap: Vault.rec.rwrap ? pack(Vault.rec.rwrap) : null, iv: b64e(iv) }));
@@ -1101,7 +1152,7 @@ async function restore(file) {
       let off = 4 + ml;
       const photos = meta.photos.map(({ size, ...rest }) => { const blob = new Blob([plain.slice(off, off + size)], { type: 'image/jpeg' }); off += size; return { ...rest, blob }; });
       const audio = (meta.audio || []).map(({ size, ...m }) => { const blob = new Blob([plain.slice(off, off + size)], { type: m.mime }); off += size; return { m, blob }; });
-      data = { entries: meta.entries, photos, audio, at: meta.at };
+      data = { entries: meta.entries, photos, audio, geo: meta.geo || {}, at: meta.at };
     } else {
       const d = JSON.parse(td.decode(u)); if (d.app !== 'travel-journal' || !Array.isArray(d.entries)) throw 0;
       data = { entries: d.entries, audio: [], photos: await Promise.all(d.photos.map(async ({ data, ...rest }) => ({ ...rest, blob: await (await fetch(data)).blob() }))), at: d.at };
@@ -1113,6 +1164,7 @@ async function restore(file) {
   for (const p of data.photos) ops.push(['photos', await encPhoto(p)]);
   for (const a of data.audio) ops.push(['audio', await encAudio(a.m, a.blob)]);
   await DB.tx(ops);
+  if (data.geo && Object.keys(data.geo).length) { Vault.geo = { ...(Vault.geo || {}), ...data.geo }; await Vault.saveGeo(); }
   urls.forEach(x => URL.revokeObjectURL(x)); urls.clear();
   await load(); S.view = 'cal'; S.openId = null; $('#sheet').classList.remove('on'); render(); toast('Restored');
 }
@@ -1347,10 +1399,229 @@ async function testStt() {
   catch (er) { out.textContent = er.status && er.status !== 401 && er.status !== 403 ? `Reached ${STT[st.provider].name}, which answered: ${er.message}` : '✗ ' + er.message; }
 }
 
+
+// ---------- trip map ----------
+// A drawn map that works with no signal: country outlines ship with the app, places come from the list below,
+// from OpenStreetMap when you ask for it, or from a pin you drop yourself.
+const GAZ_RAW = 'Colombia|Bogotá|4.711|-74.072|Medellín|6.244|-75.581|Cartagena|10.391|-75.479|Santa Marta|11.241|-74.199|Taganga|11.268|-74.192|Minca|11.145|-74.118|Tayrona|11.31|-74.04|Cali|3.452|-76.532|Salento|4.637|-75.571|Valle de Cocora|4.637|-75.485|Filandia|4.675|-75.659|Manizales|5.07|-75.517|Pereira|4.814|-75.696|Armenia|4.534|-75.681|Guatapé|6.233|-75.159|Barranquilla|10.964|-74.796|San Gil|6.556|-73.133|Barichara|6.636|-73.223|Villa de Leyva|5.636|-73.527|Palomino|11.248|-73.567|Riohacha|11.544|-72.907|Cabo de la Vela|12.2|-72.17|Mompox|9.243|-74.427|San Andrés|12.584|-81.701|Providencia|13.35|-81.37|Leticia|-4.215|-69.941|Popayán|2.444|-76.614|San Agustín|1.886|-76.27|Pasto|1.214|-77.281|Ipiales|0.829|-77.644|Bucaramanga|7.119|-73.123|Cúcuta|7.894|-72.507|Desierto de la Tatacoa|3.231|-75.168|Jardín|5.598|-75.819|Santa Fe de Antioquia|6.556|-75.828|Capurganá|8.63|-77.34|Necoclí|8.43|-76.78|Nuquí|5.71|-77.26|Bahía Solano|6.22|-77.4|Buenaventura|3.88|-77.03|Tolú|9.52|-75.58|Isla Grande|10.17|-75.74|Rosario Islands|10.17|-75.74|Punta Gallinas|12.46|-71.67\nPanama|Panama City|8.983|-79.517|Casco Viejo|8.952|-79.536|Bocas del Toro|9.34|-82.24|Boquete|8.78|-82.44|Santa Catalina|7.63|-81.25|Portobelo|9.55|-79.66|Guna Yala|9.55|-78.9|San Blas|9.55|-78.9|Colón|9.36|-79.9|David|8.43|-82.43|El Valle de Antón|8.6|-80.13|Pedasí|7.53|-80.03|Contadora|8.63|-79.04|Miraflores Locks|8.996|-79.59|Gamboa|9.12|-79.7|Isla Colón|9.34|-82.25\nEcuador|Quito|-0.18|-78.47|Guayaquil|-2.17|-79.92|Cuenca|-2.9|-79.0|Baños|-1.396|-78.42|Galápagos|-0.74|-90.31|Puerto Ayora|-0.74|-90.31|Montañita|-1.83|-80.75|Otavalo|0.234|-78.26|Mindo|-0.05|-78.78|Cotopaxi|-0.68|-78.44|Quilotoa|-0.86|-78.9|Manta|-0.96|-80.71|Loja|-3.99|-79.2|Vilcabamba|-4.26|-79.22|Tena|-0.99|-77.81|Puerto López|-1.56|-80.81|Salinas|-2.21|-80.96\nPeru|Lima|-12.046|-77.043|Cusco|-13.532|-71.967|Cuzco|-13.532|-71.967|Machu Picchu|-13.163|-72.545|Aguas Calientes|-13.155|-72.526|Ollantaytambo|-13.258|-72.264|Arequipa|-16.409|-71.537|Puno|-15.84|-70.02|Huacachina|-14.087|-75.763|Paracas|-13.83|-76.25|Nazca|-14.83|-74.94|Trujillo|-8.11|-79.03|Máncora|-4.1|-81.05|Iquitos|-3.75|-73.25|Huaraz|-9.53|-77.53|Colca Canyon|-15.6|-71.9|Chachapoyas|-6.23|-77.87|Pisac|-13.42|-71.85|Sacred Valley|-13.3|-72.1|Cajamarca|-7.16|-78.5|Tarapoto|-6.49|-76.37|Puerto Maldonado|-12.6|-69.18|Ica|-14.07|-75.73|Chiclayo|-6.77|-79.84|Rainbow Mountain|-13.87|-71.3\nBolivia|La Paz|-16.49|-68.12|Sucre|-19.03|-65.26|Uyuni|-20.46|-66.82|Salar de Uyuni|-20.13|-67.49|Santa Cruz|-17.78|-63.18|Cochabamba|-17.39|-66.16|Copacabana|-16.17|-69.09|Potosí|-19.58|-65.75|Rurrenabaque|-14.44|-67.53|Tupiza|-21.44|-65.72|Oruro|-17.97|-67.11|Coroico|-16.19|-67.73|Samaipata|-18.18|-63.87|Isla del Sol|-16.02|-69.17\nChile|Santiago|-33.449|-70.669|Valparaíso|-33.047|-71.612|Viña del Mar|-33.02|-71.55|San Pedro de Atacama|-22.91|-68.2|Atacama|-22.91|-68.2|Torres del Paine|-51.0|-73.1|Puerto Natales|-51.73|-72.5|Punta Arenas|-53.16|-70.91|Pucón|-39.27|-71.98|Puerto Varas|-41.32|-72.99|Puerto Montt|-41.47|-72.94|Easter Island|-27.11|-109.35|Rapa Nui|-27.11|-109.35|Iquique|-20.21|-70.15|Arica|-18.48|-70.31|La Serena|-29.9|-71.25|Chiloé|-42.48|-73.76|Castro|-42.48|-73.76|Valdivia|-39.82|-73.24|Concepción|-36.83|-73.05|Coyhaique|-45.57|-72.07|Carretera Austral|-45.57|-72.07|Puerto Williams|-54.93|-67.61\nArgentina|Buenos Aires|-34.604|-58.382|Mendoza|-32.889|-68.845|Bariloche|-41.134|-71.31|Ushuaia|-54.8|-68.3|El Calafate|-50.34|-72.26|El Chaltén|-49.33|-72.89|Salta|-24.78|-65.41|Córdoba|-31.42|-64.18|Puerto Iguazú|-25.6|-54.57|Iguazú|-25.69|-54.44|Jujuy|-24.19|-65.3|Tilcara|-23.58|-65.4|Purmamarca|-23.74|-65.5|Cafayate|-26.07|-65.98|Rosario|-32.95|-60.64|San Martín de los Andes|-40.16|-71.35|Puerto Madryn|-42.77|-65.04|Península Valdés|-42.5|-64.0|El Bolsón|-41.96|-71.53|Tucumán|-26.82|-65.22|Mar del Plata|-38.0|-57.55|Perito Moreno|-50.5|-73.0\nBrazil|Rio de Janeiro|-22.907|-43.173|São Paulo|-23.55|-46.633|Salvador|-12.97|-38.51|Florianópolis|-27.6|-48.55|Foz do Iguaçu|-25.52|-54.58|Manaus|-3.12|-60.02|Brasília|-15.79|-47.88|Recife|-8.05|-34.88|Fortaleza|-3.73|-38.53|Paraty|-23.22|-44.71|Ilha Grande|-23.15|-44.17|Belo Horizonte|-19.92|-43.94|Natal|-5.79|-35.21|Jericoacoara|-2.79|-40.51|Lençóis Maranhenses|-2.55|-43.1|Fernando de Noronha|-3.85|-32.42|Curitiba|-25.43|-49.27|Porto Alegre|-30.03|-51.23|Belém|-1.46|-48.5|Bonito|-21.13|-56.48|Pantanal|-17.5|-57.0|Ouro Preto|-20.39|-43.5|Trancoso|-16.59|-39.1|Morro de São Paulo|-13.38|-38.91\nUruguay|Montevideo|-34.9|-56.16|Punta del Este|-34.96|-54.95|Colonia del Sacramento|-34.47|-57.84|Cabo Polonio|-34.4|-53.79\nParaguay|Asunción|-25.26|-57.58\nVenezuela|Caracas|10.48|-66.9|Mérida|8.59|-71.15|Angel Falls|5.97|-62.54|Margarita|11.0|-63.9|Los Roques|11.85|-66.75\nCosta Rica|San José|9.93|-84.08|La Fortuna|10.47|-84.64|Monteverde|10.3|-84.82|Tamarindo|10.3|-85.84|Puerto Viejo|9.65|-82.75|Manuel Antonio|9.39|-84.14|Tortuguero|10.54|-83.5|Santa Teresa|9.65|-85.17|Nosara|9.98|-85.65|Liberia|10.63|-85.44|Uvita|9.15|-83.74|Drake Bay|8.69|-83.67|Sámara|9.88|-85.53\nNicaragua|Granada|11.93|-85.96|León|12.44|-86.88|Managua|12.13|-86.25|San Juan del Sur|11.25|-85.87|Ometepe|11.5|-85.58|Corn Islands|12.17|-83.05|Matagalpa|12.93|-85.92\nHonduras|Tegucigalpa|14.07|-87.19|Roatán|16.32|-86.54|Copán|14.84|-89.14|Utila|16.1|-86.93|La Ceiba|15.78|-86.8\nGuatemala|Guatemala City|14.63|-90.51|Antigua|14.56|-90.73|Lake Atitlán|14.69|-91.2|Panajachel|14.74|-91.16|San Pedro La Laguna|14.69|-91.27|Tikal|17.22|-89.62|Flores|16.93|-89.89|Semuc Champey|15.53|-89.96|Quetzaltenango|14.83|-91.52|Xela|14.83|-91.52|Livingston|15.83|-88.75\nEl Salvador|San Salvador|13.69|-89.19|El Tunco|13.49|-89.38|El Zonte|13.49|-89.44|Suchitoto|13.94|-89.03|Ruta de las Flores|13.8|-89.8\nBelize|Belize City|17.5|-88.2|Caye Caulker|17.74|-88.02|San Pedro|17.92|-87.96|San Ignacio|17.16|-89.07|Hopkins|16.87|-88.28|Placencia|16.51|-88.37\nMexico|Mexico City|19.43|-99.13|Cancún|21.16|-86.85|Tulum|20.21|-87.46|Playa del Carmen|20.63|-87.07|Oaxaca|17.07|-96.72|Puerto Escondido|15.86|-97.07|San Cristóbal de las Casas|16.74|-92.64|Mérida|20.97|-89.62|Chichén Itzá|20.68|-88.57|Bacalar|18.68|-88.39|Guadalajara|20.66|-103.35|Puerto Vallarta|20.65|-105.23|Mazunte|15.67|-96.55|Palenque|17.51|-91.98|Isla Mujeres|21.23|-86.73|Holbox|21.52|-87.38|Cozumel|20.42|-86.92|Campeche|19.85|-90.53|Guanajuato|21.02|-101.26|San Miguel de Allende|20.91|-100.74|Oaxaca City|17.07|-96.72\nCuba|Havana|23.11|-82.37|Trinidad|21.8|-79.98|Viñales|22.62|-83.71|Varadero|23.15|-81.25|Santiago de Cuba|20.02|-75.83\nDominican Republic|Santo Domingo|18.49|-69.93|Punta Cana|18.58|-68.4|Samaná|19.2|-69.34|Las Terrenas|19.31|-69.54|Puerto Plata|19.79|-70.69|Cabarete|19.75|-70.41\nJamaica|Kingston|17.97|-76.79|Montego Bay|18.47|-77.92|Negril|18.27|-78.35|Port Antonio|18.18|-76.45\nPuerto Rico|San Juan|18.47|-66.11\nGuyana|Georgetown|6.8|-58.16\nSuriname|Paramaribo|5.85|-55.2\nFrench Guiana|Cayenne|4.94|-52.33\nFalkland Islands|Stanley|-51.69|-57.85\nUnited States|Miami|25.76|-80.19|New York|40.71|-74.0|Los Angeles|34.05|-118.24|Houston|29.76|-95.37\nUnited Kingdom|London|51.507|-0.128\nNetherlands|Amsterdam|52.37|4.9\nSpain|Madrid|40.42|-3.7|Barcelona|41.39|2.17';
+const NORM = x => (x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const ALIAS = { 'dominican rep.': 'DO', 'falkland is.': 'FK', 'united states of america': 'US' };
+const ccOf = n => { const k = (n || '').trim().toLowerCase(); return CODES[k] || ALIAS[k] || ''; };
+const GAZ = GAZ_RAW.split('\n').flatMap(line => { const [c, ...r] = line.split('|'), cc = ccOf(c), out = []; for (let i = 0; i + 2 < r.length + 1; i += 3) if (r[i + 2] !== undefined) out.push({ cc, n: NORM(r[i]), name: r[i], ll: [+r[i + 1], +r[i + 2]] }); return out; });
+function gazLookup(place, cc) {
+  const p = NORM(place); if (!p) return null; let best = null;
+  for (const g of GAZ) {
+    if (cc && g.cc && cc !== g.cc) continue;
+    if (g.n === p) return g;
+    if (p.length >= 4 && (` ${p} `.includes(` ${g.n} `) || ` ${g.n} `.includes(` ${p} `)) && (!best || g.n.length > best.n.length)) best = g;
+  }
+  return best;
+}
+const PS = 100, mx = lo => lo * PS, my = la => { const r = Math.max(-80, Math.min(80, la)) * Math.PI / 180; return -Math.log(Math.tan(Math.PI / 4 + r / 2)) * 180 / Math.PI * PS; };
+const unproj = (x, y) => [(2 * Math.atan(Math.exp(-y / PS * Math.PI / 180)) - Math.PI / 2) * 180 / Math.PI, x / PS];
+const hav = (a, b) => { const R = 6371, t = Math.PI / 180, dLa = (b[0] - a[0]) * t, dLo = (b[1] - a[1]) * t, h = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * t) * Math.cos(b[0] * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+
+function tripStops() {
+  const out = [];
+  for (const e of chapters()) for (const d of range(e.start, e.end)) {
+    const pl = (e.days[d] || '').trim(); if (!pl) continue;
+    const c = dayCountry(e, d) || e.countries[0] || '', cc = ccOf(c), key = NORM(pl) + '|' + (cc || NORM(c)), last = out[out.length - 1];
+    if (last && last.key === key) { last.end = d; last.days++; last.eids.add(e.id); }
+    else out.push({ place: pl, country: c, cc, key, start: d, end: d, days: 1, eid: e.id, eids: new Set([e.id]) });
+  }
+  return out;
+}
+function locate(st) {
+  const g = Vault.geo && Vault.geo[st.key]; if (g) return { ll: [g[0], g[1]], src: g[2] };
+  const z = gazLookup(st.place, st.cc); return z ? { ll: z.ll, src: 'list' } : null;
+}
+
+const MapV = {
+  world: null, alive: false, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
+  destroy() { this.ro?.disconnect(); this.alive = false; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); this.ptr.clear(); },
+  async loadWorld() {
+    if (this.world) return this.world;
+    const t = await (await fetch('vendor/world-50m.json')).json();
+    const [sx, sy] = t.transform.scale, [tx, ty] = t.transform.translate;
+    const arcs = t.arcs.map(a => { let x = 0, y = 0; return a.map(([dx, dy]) => { x += dx; y += dy; return [x * sx + tx, y * sy + ty]; }); });
+    const ring = ids => { let p = []; for (const i of ids) { const a = i < 0 ? arcs[~i].slice().reverse() : arcs[i]; p = p.concat(p.length ? a.slice(1) : a); } return p; };
+    const dOf = p => 'M' + p.map(([lo, la]) => mx(lo).toFixed(1) + ' ' + my(la).toFixed(1)).join('L') + 'Z';
+    const out = [];
+    for (const g of t.objects.countries.geometries) {
+      if (g.properties.name === 'Antarctica') continue;
+      const polys = g.type === 'Polygon' ? [g.arcs] : g.arcs; let d = '';
+      for (const poly of polys) for (const r of poly) d += dOf(ring(r));
+      out.push({ name: g.properties.name, cc: ccOf(g.properties.name), d });
+    }
+    return (this.world = out);
+  },
+  compute() {
+    const st = tripStops(); this.all = st; this.pts = [];
+    st.forEach(x => { const l = locate(x); x.ll = l ? l.ll : null; x.src = l ? l.src : ''; if (x.ll) { x.x = mx(x.ll[1]); x.y = my(x.ll[0]); x.n = this.pts.length; this.pts.push(x); } });
+  },
+  missing() { const m = new Map(); this.all.forEach(x => { if (!x.ll && !m.has(x.key)) m.set(x.key, x); }); return [...m.values()]; },
+  async mount() {
+    this.destroy(); this.alive = true; this.placing = '';
+    const box = $('#mapbox'); if (!box) return;
+    const meas = () => { this.W = box.clientWidth; this.H = box.clientHeight; };
+    this.compute(); this.panel(); meas(); if (!this.W || !this.H) { await new Promise(r => requestAnimationFrame(r)); meas(); }
+    const f = S.mapFocus; this.idx = f ? Math.max(0, this.pts.findIndex(p => p.eids.has(f))) : Math.max(0, this.pts.length - 1);
+    this.fit(false); this.build(); this.update(); this.panel();
+    this.bind(box);
+    this.ro = new ResizeObserver(() => { // the bottom card changes the map's height after it is first measured
+      const w = box.clientWidth, h = box.clientHeight; if (!w || !h || (w === this.W && h === this.H) || !this.vb) return;
+      const v = this.vb, cx = v.x + v.w / 2, cy = v.y + v.h / 2; this.W = w; this.H = h; this.goto(cx, cy, v.w, 0);
+    });
+    this.ro.observe(box);
+    try { const w = await this.loadWorld(); if (!this.alive) return; this.drawLand(w); } catch { const n = $('#mapnote'); if (n) n.dataset.nomap = '1'; }
+  },
+  drawLand(w) {
+    const g = $('#land'); if (!g) return;
+    const vis = new Set(this.all.map(x => x.cc).filter(Boolean));
+    const base = w.filter(c => !vis.has(c.cc)).map(c => c.d).join('');
+    let h = `<path d="${base}" class="ld"/>`;
+    const names = [...new Set(this.all.map(x => x.country).filter(Boolean))];
+    for (const c of w.filter(c => c.cc && vis.has(c.cc))) { const nm = names.find(n => ccOf(n) === c.cc) || c.name, p = pal(nm); h += `<path d="${c.d}" class="ld vis" style="fill:${p.bg};stroke:${p.bd}"/>`; }
+    g.innerHTML = h;
+  },
+  fit(anim) {
+    const P = this.pts; let cx = 0, cy = 0, w = 0;
+    if (P.length) {
+      const xs = P.map(p => p.x), ys = P.map(p => p.y), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      cx = (x0 + x1) / 2; cy = (y0 + y1) / 2; w = Math.max((x1 - x0) * 1.6, (y1 - y0) * 1.6 * this.W / this.H, 7 * PS);
+    } else { cx = mx(-75); cy = my(5); w = 40 * PS; }
+    this.fitW = w; this.goto(cx, cy, w, anim ? 700 : 0);
+  },
+  goto(cx, cy, w, ms) {
+    w = Math.max(.6 * PS, Math.min(360 * PS, w)); cancelAnimationFrame(this.cam);
+    const v0 = this.vb ? { cx: this.vb.x + this.vb.w / 2, cy: this.vb.y + this.vb.h / 2, w: this.vb.w } : null;
+    const set = (a, b, c) => { this.vb = { x: a - c / 2, y: b - c * this.H / this.W / 2, w: c, h: c * this.H / this.W }; this.update(); };
+    if (!ms || !v0) { set(cx, cy, w); return; }
+    const t0 = performance.now(), lw0 = Math.log(v0.w), lw1 = Math.log(w);
+    const step = t => { const k = Math.min(1, (t - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; set(v0.cx + (cx - v0.cx) * e, v0.cy + (cy - v0.cy) * e, Math.exp(lw0 + (lw1 - lw0) * e)); if (k < 1 && this.alive) this.cam = requestAnimationFrame(step); };
+    this.cam = requestAnimationFrame(step);
+  },
+  build() {
+    const box = $('#mappins'); if (!box) return;
+    box.innerHTML = this.pts.map((p, i) => `<button class="mp" data-i="${i}" aria-label="${esc(p.place)}"><i>${i + 1}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
+    const d = this.pts.map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('');
+    const r = $('#rt0'); if (r) r.setAttribute('d', d);
+  },
+  update() {
+    const svg = $('#mapsvg'); if (!svg || !this.vb) return; const v = this.vb;
+    svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+    const k = this.W / v.w, f = S.mapFocus, rects = [], order = this.pts.map((_, i) => i).sort((a, b) => (b === this.idx) - (a === this.idx) || this.pts[b].days - this.pts[a].days);
+    const els = $$('#mappins .mp'), done = new Array(els.length);
+    for (const i of order) {
+      const p = this.pts[i], el = els[i]; if (!el) continue;
+      const sx = (p.x - v.x) * k, sy = (p.y - v.y) * k, out = sx < -28 || sy < -28 || sx > this.W + 28 || sy > this.H + 28;
+      el.style.display = out ? 'none' : '';
+      if (out) continue;
+      el.style.transform = `translate(${sx - 14}px,${sy - 14}px)`;
+      el.className = 'mp' + (i === this.idx ? ' sel' : i < this.idx ? ' past' : ' fut') + (f && p.eids.has(f) ? ' foc' : '');
+      const w = Math.min(130, p.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
+      const clash = rects.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0) || sx + 16 + w > this.W + 4;
+      el.classList.toggle('nolab', (clash || sx < 10) && i !== this.idx);
+      if (!clash || i === this.idx) rects.push(r);
+      else rects.push({ x0: sx - 14, x1: sx + 14, y0: sy - 14, y1: sy + 14 });
+    }
+    this.route();
+  },
+  route() {
+    const d = this.pts.slice(0, this.idx + 1).map((p, i) => (i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1)).join('');
+    const r = $('#rt1'); if (r) r.setAttribute('d', this.pts.length > 1 ? d : '');
+  },
+  go(i, fly = true) {
+    if (!this.pts.length) return; this.idx = Math.max(0, Math.min(this.pts.length - 1, i));
+    const p = this.pts[this.idx]; if (fly) this.goto(p.x, p.y, Math.min(this.vb.w, this.fitW * .6), 650); else this.update();
+    this.panel();
+  },
+  panel() {
+    const c = $('#mapcard'); if (!c) return;
+    const P = this.pts, A = this.all, miss = this.missing();
+    const ccs = new Set(A.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
+    let km = 0; for (let i = 1; i < P.length; i++) km += hav(P[i - 1].ll, P[i].ll);
+    const stats = `<div class="mstats"><div><b>${A.length}</b><span>stop${A.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km in lines</span></div></div>`;
+    if (!P.length) { c.innerHTML = `${stats}<p class="hint" style="margin:10px 0 0">${A.length ? 'None of your places are on the map yet. Tap “Place them” above to find or drop them.' : 'Add a place to a day in a chapter and it shows up here.'}</p>`; this.note(miss); return; }
+    const p = P[this.idx];
+    c.innerHTML = `${stats}
+      <div class="mstop"><div style="min-width:0;flex:1"><b>${this.idx + 1}. ${esc(p.place)}</b><small>${flagOf(p.country)} ${esc(p.country || '')} · ${rangeLabel(p.start, p.end)}${p.days > 1 ? ' · ' + p.days + ' days' : ''}</small></div><button class="btn small" data-act="map-move">Move pin</button><button class="btn small pri" data-act="map-open" data-id="${p.eid}">Chapter</button></div>
+      <div class="mctl"><button class="circ" data-act="map-play" aria-label="${this.timer ? 'Pause' : 'Play the journey'}">${ico(this.timer ? 'pause' : 'play', 20, '#B5562F', 2.2)}</button><div style="flex:1;min-width:0"><input type="range" id="mapidx" min="0" max="${Math.max(0, P.length - 1)}" value="${this.idx}" aria-label="Move through the trip"><div class="mdates"><span>${fmt(P[0].start, SHORT)}</span><span>${fmt(P[P.length - 1].end, SHORT)}</span></div></div></div>`;
+    this.note(miss);
+  },
+  note(miss) {
+    const n = $('#mapnote'); if (!n) return;
+    n.innerHTML = this.placing ? `<span class="mchip on">Tap the map where ${esc((this.all.find(x => x.key === this.placing) || {}).place || 'it is')} is <button data-act="map-cancel">Cancel</button></span>` : miss.length ? `<button class="mchip" data-act="map-missing">📍 ${miss.length} place${miss.length > 1 ? 's' : ''} not on the map. Place ${miss.length > 1 ? 'them' : 'it'}</button>` : '';
+  },
+  play() {
+    if (this.timer) { clearInterval(this.timer); this.timer = 0; this.panel(); return; }
+    if (this.pts.length < 2) return; if (this.idx >= this.pts.length - 1) this.go(0);
+    this.timer = setInterval(() => { if (!this.alive) return; if (this.idx >= this.pts.length - 1) { clearInterval(this.timer); this.timer = 0; this.fit(true); this.panel(); return; } this.go(this.idx + 1); }, 1700);
+    this.panel();
+  },
+  zoom(f, sx, sy) {
+    const v = this.vb; if (!v) return; cancelAnimationFrame(this.cam);
+    sx ??= this.W / 2; sy ??= this.H / 2;
+    const w = Math.max(.6 * PS, Math.min(360 * PS, v.w / f)), k = w / this.W, ax = v.x + sx / this.W * v.w, ay = v.y + sy / this.H * v.h;
+    this.vb = { x: ax - sx * k, y: ay - sy * k, w, h: w * this.H / this.W }; this.update();
+  },
+  bind(box) {
+    const pos = ev => { const r = box.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; };
+    box.onpointerdown = ev => { if (ev.target.closest('.mp,.mapctl,#mapnote,button')) return; box.setPointerCapture(ev.pointerId); this.ptr.set(ev.pointerId, pos(ev)); this.drag = { moved: 0, start: pos(ev) }; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); };
+    box.onpointermove = ev => {
+      if (!this.ptr.has(ev.pointerId)) return; const old = this.ptr.get(ev.pointerId), now = pos(ev), v = this.vb; this.ptr.set(ev.pointerId, now);
+      if (this.ptr.size === 1) { this.drag.moved += Math.abs(now[0] - old[0]) + Math.abs(now[1] - old[1]); const k = v.w / this.W; this.vb = { ...v, x: v.x - (now[0] - old[0]) * k, y: v.y - (now[1] - old[1]) * k }; this.update(); }
+      else if (this.ptr.size === 2) {
+        const o = [...this.ptr.entries()].map(([id, p]) => id === ev.pointerId ? old : p), n = [...this.ptr.values()];
+        const d0 = Math.hypot(o[0][0] - o[1][0], o[0][1] - o[1][1]) || 1, d1 = Math.hypot(n[0][0] - n[1][0], n[0][1] - n[1][1]);
+        this.drag.moved += 99; this.zoom(d1 / d0, (n[0][0] + n[1][0]) / 2, (n[0][1] + n[1][1]) / 2);
+      }
+    };
+    const up = ev => {
+      if (!this.ptr.has(ev.pointerId)) return; this.ptr.delete(ev.pointerId);
+      if (this.drag && this.drag.moved < 8 && !this.ptr.size && this.placing) this.dropPin(pos(ev));
+      if (!this.ptr.size) this.drag = null;
+    };
+    box.onpointerup = up; box.onpointercancel = up;
+    box.onwheel = ev => { ev.preventDefault(); const p = pos(ev); this.zoom(ev.deltaY < 0 ? 1.25 : .8, p[0], p[1]); };
+    const card = $('#mapcard'); if (card) card.oninput = ev => { if (ev.target.id === 'mapidx') this.go(+ev.target.value); };
+  },
+  async dropPin(p) {
+    const v = this.vb, k = v.w / this.W, [la, lo] = unproj(v.x + p[0] * k, v.y + p[1] * k), key = this.placing; this.placing = '';
+    Vault.geo ||= {}; Vault.geo[key] = [+la.toFixed(4), +lo.toFixed(4), 'manual']; await Vault.saveGeo(); this.refresh(key);
+  },
+  refresh(selKey) {
+    this.compute(); const i = selKey ? this.pts.findIndex(p => p.key === selKey) : Math.min(this.idx, this.pts.length - 1);
+    this.idx = Math.max(0, i); this.build(); this.fit(false); this.update(); this.panel();
+    if (this.world) this.drawLand(this.world);
+  },
+  async findOnline() {
+    if (this.busy) return; if (!navigator.onLine) { toast('You need signal to look places up'); return; }
+    this.busy = true; let found = 0, n = 0; const list = this.missing().filter(x => !this.tried.has(x.key));
+    for (const m of list) {
+      if (!this.alive) break; this.tried.add(m.key); n++; toast(`Looking up ${m.place}… (${n} of ${list.length})`);
+      try {
+        const cc = m.cc ? '&countrycodes=' + m.cc.toLowerCase() : '';
+        const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=en' + cc + '&q=' + encodeURIComponent(m.place + (m.country ? ', ' + m.country : '')));
+        const j = r.ok ? await r.json() : [];
+        if (j[0]) { Vault.geo ||= {}; Vault.geo[m.key] = [+(+j[0].lat).toFixed(4), +(+j[0].lon).toFixed(4), 'osm']; found++; await Vault.saveGeo(); this.refresh(); }
+      } catch {}
+      await new Promise(r => setTimeout(r, 1100));
+    }
+    this.busy = false; if (this.alive) { toast(found ? `Found ${found} of ${list.length}` : 'Could not find those places. Drop a pin by hand instead.'); this.panel(); }
+  }
+};
+const mapHTML = () => `<div class="mapscreen">
+  <header class="top c"><div class="row"><button class="cbtn" data-act="map-back" aria-label="Back">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Latin America</div><h1>Trip map</h1></div><div style="width:42px"></div></div></header>
+  <div id="mapbox"><svg id="mapsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="land"></g><path id="rt0" class="rt0" fill="none"/><path id="rt1" class="rt1" fill="none"/></svg><div id="mappins"></div><div id="mapnote"></div>
+    <div class="mapctl"><button class="cbtn" data-act="map-in" aria-label="Zoom in">${ico('plus', 18)}</button><button class="cbtn" data-act="map-out" aria-label="Zoom out">${ico('minus', 18)}</button><button class="cbtn" data-act="map-fit" aria-label="Show everything">${ico('fit', 18)}</button></div></div>
+  <div class="mapcard" id="mapcard"></div></div>`;
+
 // ---------- events ----------
 // no zoom: double-tap is handled by touch-action in the CSS, pinch by these
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, ev => ev.preventDefault()));
 document.addEventListener('click', async ev => {
+  const mp = ev.target.closest('.mp'); if (mp) { MapV.go(+mp.dataset.i); return; }
   const t = ev.target.closest('[data-act]'); if (!t) return;
   const act = t.dataset.act, e = cur();
   switch (act) {
@@ -1379,6 +1650,18 @@ document.addEventListener('click', async ev => {
     case 'nav': flush(); S.view = t.dataset.v; S.openId = null; render(); scrollTo(0, 0); break;
     case 'goto': { const d = parse(t.dataset.m); S.month = new Date(d.getFullYear(), d.getMonth(), 1); render(); break; }
     case 'tab': S.tab = t.dataset.tab; rerender(); break;
+    case 'map': flush(); S.mapFrom = S.view === 'entry' ? S.openId : ''; S.mapFocus = S.mapFrom; S.mapBack = S.view; S.view = 'map'; render(); scrollTo(0, 0); break;
+    case 'map-back': { MapV.destroy(); S.mapFocus = ''; if (S.mapFrom && S.entries.some(x => x.id === S.mapFrom)) { S.view = 'entry'; S.openId = S.mapFrom; } else { S.view = S.mapBack && S.mapBack !== 'entry' ? S.mapBack : 'cal'; S.openId = null; } render(); scrollTo(0, 0); break; }
+    case 'map-in': MapV.zoom(1.6); break;
+    case 'map-out': MapV.zoom(1 / 1.6); break;
+    case 'map-fit': MapV.fit(true); break;
+    case 'map-play': MapV.play(); break;
+    case 'map-open': { MapV.destroy(); S.mapFrom = ''; S.mapFocus = ''; openEntry(t.dataset.id); break; }
+    case 'map-move': { const p = MapV.pts[MapV.idx]; if (p) { MapV.placing = p.key; MapV.note(MapV.missing()); toast('Tap the map where it really is'); } break; }
+    case 'map-cancel': MapV.placing = ''; MapV.note(MapV.missing()); break;
+    case 'map-missing': openSheet(`<h3>Places not on the map</h3><p class="hint" style="margin-top:0">The built-in list covers popular spots across Latin America. For the rest you can look them up on OpenStreetMap (it receives only the place and country names), or drop a pin yourself.</p><div class="stack"><button class="btn pri" data-act="map-find"${navigator.onLine ? '' : ' disabled'}>${navigator.onLine ? 'Look them up online' : 'Look up online (needs signal)'}</button>${MapV.missing().map(m => `<button class="btn" data-act="map-place" data-k="${esc(m.key)}">📍 Drop a pin for ${esc(m.place)}</button>`).join('')}<button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
+    case 'map-find': closeSheet(); MapV.findOnline(); break;
+    case 'map-place': { closeSheet(); MapV.placing = t.dataset.k; MapV.note(MapV.missing()); toast('Tap the map where it is'); break; }
     case 'reload': if (Rec.active) { toast('Finish your recording first'); break; } await flush(); location.reload(); break;
     case 'more': openSheet(`<h3>Chapter ${chapterNo(e)}</h3><div class="stack"><button class="btn" data-act="share-close">Send chapter to Claude</button><button class="btn danger" data-act="del-entry-close">Delete chapter</button><button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
     case 'share-close': closeSheet(); shareChapter(e); break;
@@ -1550,7 +1833,7 @@ const Lock = {
     Vault.needKey = keyPending; keyPending = false; rkShown = '';
     urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
     S.entries = []; S.photos = []; S.audio = []; S.select = null; Stt.busy.clear();
-    Vault.key = null; Vault.rec = null; Vault.apiKey = ''; Vault.stt = null;
+    Vault.key = null; Vault.rec = null; Vault.apiKey = ''; Vault.stt = null; Vault.geo = null; MapV.destroy();
     $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = ''; $('#recov').classList.remove('on'); $('#recov').innerHTML = '';
     this.setMode('unlock');
   },

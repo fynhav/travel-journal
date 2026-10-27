@@ -3,7 +3,7 @@
 const V = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE = 'tj-' + V;
 const SCOPE = self.registration.scope;
-const FILES = ['index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'vendor/jszip.min.js', 'vendor/plus-jakarta-sans-latin-wght-normal.woff2', 'vendor/fraunces-latin-wght-normal.woff2'];
+const FILES = ['index.html', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'vendor/jszip.min.js', 'vendor/plus-jakarta-sans-latin-wght-normal.woff2', 'vendor/fraunces-latin-wght-normal.woff2', 'vendor/world-50m.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {
