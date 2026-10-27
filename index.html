@@ -283,14 +283,15 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 <form id="lockForm"><input class="hid" type="text" name="username" value="Travel Journal" autocomplete="username" tabindex="-1" aria-hidden="true"><input id="rk" type="text" placeholder="Recovery key" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" hidden><input id="pw1" type="password" name="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go"><input id="pw2" type="password" placeholder="Repeat password" autocomplete="new-password" enterkeyhint="go" hidden><button class="btn pri" id="lockBtn" type="submit">Unlock</button></form>
 <button class="btn ghost small" id="lockForgot" data-act="forgot" hidden>Forgot password?</button>
 <button class="btn ghost small" id="lockBack" data-act="back-unlock" hidden>Back</button>
-<button class="btn ghost small" id="lockErase" data-act="erase" hidden>No recovery key? Erase and start again</button></div>
+<button class="btn ghost small" id="lockErase" data-act="erase" hidden>No recovery key? Erase and start again</button>
+<button class="btn ghost small" id="lockUpdBtn" data-act="lock-update">Check for updates</button><p class="hint" id="lockUpd" style="margin:2px 0 0;text-align:center"></p></div>
 <div id="recov" aria-live="polite"></div>
 <div id="toast"></div>
 <script>
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.19'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.20'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1828,6 +1829,12 @@ document.addEventListener('click', async ev => {
     case 'v-del': if (confirm('Delete this recording? It has not been turned into text yet.')) { await dropAudio(t.dataset.id); paintVoice(); if (S.view === 'cal') rerender(); } break;
     case 'stt-test': testStt(); break;
     case 'check-update': checkUpdate(); break;
+    case 'lock-update': {
+      const out = $('#lockUpd'), btn = $('#lockUpdBtn'); if (btn.disabled) break; btn.disabled = true; out.textContent = 'Checking…';
+      let m = ''; try { m = await SW.check(false); } catch { m = "Couldn't check. You may be offline."; }
+      if (S.update) { out.textContent = 'Updating…'; location.reload(); break; }
+      out.textContent = m.startsWith("You're on the latest") ? `You're on the latest version (${APP_VERSION}).` : m; btn.disabled = false; break;
+    }
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
