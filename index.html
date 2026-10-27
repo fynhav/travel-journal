@@ -280,7 +280,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.10'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.11'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -662,7 +662,7 @@ const topbar = (eyebrow, title, right = '') => `<header class="top"><div class="
 function notices() {
   let h = '';
   if (Store.low()) h += `<div class="banner warn"><span>⚠︎ Storage is nearly full. ${esc(Store.text())} Back up to iCloud and free some space so new voice notes and photos can be saved.</span></div>`;
-  if (S.update) h += `<div class="banner"><span>A new version is ready.</span><button class="btn small pri" data-act="reload">Reload</button></div>`;
+  if (S.update) h += `<div class="banner"><span>A new version is ready. It installs by itself next time the app locks.</span><button class="btn small pri" data-act="reload">Reload</button></div>`;
   const w = S.audio.filter(a => a.status !== 'recording');
   if (w.length) h += `<div class="banner"><span>🎙 ${w.length} voice note${w.length > 1 ? 's' : ''} not yet turned into text. Open the chapter to see.</span></div>`;
   return h;
@@ -950,8 +950,10 @@ const SW = {
       if (!this.ok || !navigator.serviceWorker.controller) { if (silent) return ''; await flush(); location.replace('index.html?v=' + encodeURIComponent(v[1])); return 'Updating…'; }
       await this.install(v[1]);
       S.update = v[1];
+      // swap versions only where nothing can be lost: at the lock screen (the journal is locked anyway)
+      if (Lock.locked && Lock.ready && !Lock.busy && !Vault.needKey && !['#pw1', '#pw2', '#rk'].some(i => $(i).value)) { location.reload(); return 'Updating…'; }
       if (!Lock.locked && S.view !== 'entry') render();
-      return silent ? '' : 'Update ready. Tap Reload below.';
+      return silent ? '' : 'Update ready. It installs by itself next time the app locks, or tap Reload.';
     } catch { return silent ? '' : "Couldn't check. You may be offline."; }
   }
 };
@@ -1843,6 +1845,7 @@ const Lock = {
     Vault.key = null; Vault.rec = null; Vault.apiKey = ''; Vault.stt = null; Vault.geo = null; MapV.destroy();
     $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = ''; $('#recov').classList.remove('on'); $('#recov').innerHTML = '';
     this.setMode('unlock');
+    if (S.update && !Vault.needKey) setTimeout(() => location.reload(), 400); // a new version is waiting: load it now, the app is locked anyway
   },
   async erase() {
     if (!confirm('This permanently deletes every chapter and photo on this phone, and the password. Only do this if you have a backup file to restore from. Continue?')) return;
