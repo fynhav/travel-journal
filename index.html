@@ -32,6 +32,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .top h1{font:600 28px/1.15 var(--serif);margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .top.c h1{font-size:22px}
 .top h1 .yr{color:#8B7F70}
+.bookbtn{display:inline-flex;align-items:center;gap:7px;height:42px;padding:0 16px 0 14px;border:0;border-radius:21px;background:var(--accent);color:#fff;font-weight:700;font-size:13.5px;cursor:pointer;flex:none;box-shadow:0 4px 12px rgba(181,86,47,.3)}
 .cbtn{width:42px;height:42px;border-radius:50%;background:var(--card);border:1px solid #E3D5BA;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;flex:none}
 .txtbtn{border:0;background:none;color:var(--accent);font-weight:700;font-size:14px;padding:8px;cursor:pointer}
 .wrap{padding:12px 16px 0;max-width:720px;margin:0 auto}
@@ -280,7 +281,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.12'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.13'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -656,7 +657,6 @@ const navHTML = a => `<nav class="nav" aria-label="Main">
   <button class="nv${a === 'chapters' ? ' on' : ''}" data-act="nav" data-v="chapters" aria-label="Chapters">${ico('list')}</button>
   <button class="micfab" data-act="current" aria-label="Open the current chapter">${ico('pen', 24, '#fff', 2.1)}</button>
   <button class="nv" data-act="map" aria-label="Trip map">${ico('map')}</button>
-  <button class="nv${a === 'book' ? ' on' : ''}" data-act="nav" data-v="book" aria-label="Book">${ico('book')}</button>
   <button class="nv" data-act="settings" aria-label="Settings">${ico('gear')}</button></nav>`;
 const offlineBadge = short => (navigator.serviceWorker && navigator.serviceWorker.controller) ? `<span class="okb">${ico('check', 14, '#33502A', 2.6)}${short ? 'Offline' : 'Works offline'}</span>` : '';
 const topbar = (eyebrow, title, right = '') => `<header class="top"><div class="row"><div class="tt"><div class="eyebrow">${esc(eyebrow)}</div><h1>${title}</h1></div>${right}</div></header>`;
@@ -806,19 +806,19 @@ function chapterRow(e) {
 }
 function chaptersHTML() {
   const list = chapters();
-  return `${topbar('Latin America', 'Chapters')}<div class="wrap">${notices()}${list.map(chapterRow).join('') || '<p class="hint">No chapters yet. Tap a day on the calendar to start one.</p>'}</div>${navHTML('chapters')}`;
+  return `${topbar('Latin America', 'Chapters', `<button class="bookbtn" data-act="nav" data-v="book">${ico('book', 17, '#fff', 2.1)}Your book</button>`)}<div class="wrap">${notices()}${list.map(chapterRow).join('') || '<p class="hint">No chapters yet. Tap a day on the calendar to start one.</p>'}</div>${navHTML('chapters')}`;
 }
 function bookHTML() {
   const list = chapters(), days = list.reduce((n, e) => n + daysBetween(e.start, e.end) + 1, 0), lastB = +lsGet('tj.lastBackup') || 0;
   const cards = list.map(e => `<button class="cv" data-act="open" data-id="${e.id}"><span class="th" style="display:block">${cover(e)}</span><b>${esc(chTitle(e) || 'Chapter ' + chapterNo(e))}</b><small>${e.countries[0] ? flagOf(e.countries[0]) + ' ' : ''}${rangeLabel(e.start, e.end)}</small></button>`).join('');
-  return `${topbar('Everything so far', 'Your book', offlineBadge())}<div class="wrap">${notices()}
+  return `<header class="top c"><div class="row"><button class="cbtn" data-act="nav" data-v="chapters" aria-label="Back to chapters">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Everything so far</div><h1>Your book</h1></div><div style="width:42px"></div></div></header><div class="wrap">${notices()}
     <div class="stats"><div class="stat"><b>${list.length}</b><span>chapter${list.length === 1 ? '' : 's'} so far</span></div><div class="stat"><b>${days}</b><span>day${days === 1 ? '' : 's'} written about</span></div></div>
     ${list.length ? `<div class="sb">Chapters</div><div class="bcards">${cards}</div>` : ''}
     <button class="mapcta" data-act="map"><span class="ic">${ico('map', 22, '#B5562F')}</span><span style="flex:1;min-width:0;text-align:left"><b>Trip map</b><small>Your route through time</small></span>${ico('next', 18, '#7A6E60')}</button>
     <div class="tocard"><h3>Turn it into the book</h3><div style="font-size:12.5px;line-height:1.5;color:#4A4036">Send one chapter or the whole journal to Claude. It writes your memoir chapter by chapter, with your photos in place.</div><div class="btns"><button class="btn pri" data-act="send-pick">Send a chapter</button><button class="btn" data-act="export-book">Whole book</button></div></div>
     <div class="safe"><span class="ic">${ico('shield', 20, '#33502A')}</span><div style="flex:1;min-width:0"><b>Stored encrypted on this phone</b><small>${lastB ? 'Last iCloud backup ' + new Date(lastB).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'No iCloud backup yet'}</small></div><button class="btn small" data-act="backup" style="background:#F3E2CF;border-color:#F3E2CF;color:#8E3F1E">Back up</button></div>
     <div class="safe stor"><div style="flex:1;min-width:0"><b>Phone storage</b><div class="sbar"><i class="storeBar"></i></div><small class="storeLine">${esc(Store.text())}</small></div></div>
-  </div>${navHTML('book')}`;
+  </div>${navHTML('chapters')}`;
 }
 
 function entryHTML(e) {
