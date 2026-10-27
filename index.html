@@ -166,11 +166,9 @@ const FIXED = [
  "What made you laugh, or almost cry?",
  "If this chapter had a title, what would it be?"
 ];
-// asked for every place, in this order
+// asked for every chapter, in this order (place, country and dates are already fields in the app)
+const DROPPED = ["What's the name of this place?", 'Where is it?', 'When were we there?'];
 const STANDARD = [
- "What's the name of this place?",
- "Where is it?",
- "When were we there?",
  "How did we get there?",
  "What did we do?",
  "Who did we meet?",
@@ -407,6 +405,7 @@ async function load() {
   S.entries = await Promise.all((await DB.all('entries')).map(decEntry));
   S.photos = await Promise.all((await DB.all('photos')).map(decPhoto));
   S.audio = await Promise.all((await DB.all('audio')).map(decAudioMeta));
+  for (const e of S.entries) e.qa = (e.qa || []).filter(x => !(DROPPED.includes(x.q) && !(x.a || '').trim()));
   for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; }
 }
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
