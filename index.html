@@ -228,7 +228,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.4'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.5'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1204,15 +1204,21 @@ const Rec = {
     this.overlay(); this.frame(); paintVoice();
   },
   // keep an encrypted copy while talking, so a crash or a killed app loses seconds, not the whole note
-  persist(status) {
+  persist(status, strict) {
     const m = this.m; if (!m) return this.w;
-    this.w = this.w.then(async () => {
-      if (!Vault.key || !S.entries.some(x => x.id === m.entryId)) return;
+    const job = this.w.then(async () => {
+      if (!Vault.key || !S.entries.some(x => x.id === m.entryId)) { if (strict) throw new Error('locked'); return; }
       m.dur = Date.now() - this.t0; m.status = status;
-      await DB.put('audio', await encAudio(m, new Blob(this.chunks, { type: m.mime })));
+      const blob = new Blob(this.chunks, { type: m.mime });
+      await DB.put('audio', await encAudio(m, blob));
+      if (strict) { // read it back: only say "saved" when it really is on the phone
+        const r = await DB.get('audio', m.id);
+        if (!r || !r.bct || !(r.bct.byteLength || r.bct.length)) throw new Error('not stored');
+      }
       if (!S.audio.includes(m)) S.audio.push(m);
-    }).catch(() => {});
-    return this.w;
+    });
+    this.w = job.catch(() => {});
+    return strict ? job : this.w;
   },
   frame() {
     const el = $('#recov .tm'); if (el) el.textContent = fmtDur(Date.now() - this.t0);
@@ -1256,11 +1262,15 @@ const Rec = {
         if (!drop) toast('That was too short to keep');
         if (m && S.audio.includes(m)) await dropAudio(m.id); else if (m) await DB.del('audio', m.id);
       } else if (S.entries.find(x => x.id === m.entryId) && Vault.key) {
-        await this.persist('pending');
+        await this.persist('pending', true);
         toast(Stt.ready() ? (navigator.onLine ? 'Saved. Turning it into text…' : 'Saved. It will be turned into text when you have signal') : 'Saved. Add a transcription key in Settings to turn it into text');
         Stt.run();
       }
-    } catch { toast("Couldn't save the recording"); }
+    } catch {
+      // never lose it silently: keep the audio in memory and let the user save the raw file
+      this.rescue = new Blob(this.chunks, { type: this.mime });
+      openSheet(`<h3>Couldn't save the recording</h3><p class="hint" style="margin-top:0">The phone refused to store it, which usually means it is very low on space. Save the audio as a file now so nothing is lost. You can free some space and add it back by hand.</p><div class="stack"><button class="btn pri" data-act="rec-rescue">Save the audio file</button><button class="btn ghost" data-act="close-sheet">Close</button></div>`);
+    }
     this.chunks = []; this.m = null;
     if (!Lock.locked) { if (S.view === 'entry') rerender(); else paintVoice(); }
     this.res && this.res();
@@ -1334,6 +1344,7 @@ document.addEventListener('click', async ev => {
       openEntry(x.id); startRec(x, nextTarget(x)); break;
     }
     case 'rec-next': startRec(e, nextTarget(e)); break;
+    case 'rec-rescue': if (Rec.rescue) await shareOrDownload([new File([Rec.rescue], 'voice-note.' + (/mp4/.test(Rec.rescue.type) ? 'm4a' : /ogg/.test(Rec.rescue.type) ? 'ogg' : 'webm'), { type: Rec.rescue.type })], 'Voice note'); break;
     case 'rec-discard': if (confirm('Discard this recording?')) { Rec.drop = true; Rec.stop(); } break;
     case 'add-country': addCountry(); break;
     case 'rm-country': e.countries.splice(+t.dataset.i, 1); saveEntry(e); rerender(); break;
