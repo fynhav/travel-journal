@@ -160,6 +160,9 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .safe{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid #F0E8D8;border-radius:24px;padding:14px 14px 14px 16px;margin-top:12px;box-shadow:0 4px 16px rgba(120,90,50,.07)}
 .safe .ic{width:40px;height:40px;border-radius:50%;background:#E1EAD3;display:flex;align-items:center;justify-content:center;flex:none}
 .safe b{display:block;font-size:13.5px}
+.sbar{height:6px;border-radius:3px;background:#E9DEC8;margin:8px 0 6px;overflow:hidden}
+.sbar i{display:block;height:100%;background:#7FA06B;border-radius:3px;transition:width .3s}
+.banner.warn{background:#FBE9E4;border-color:#E7B9AE;color:#8A2B16}
 .safe small{color:var(--muted);font-size:12px}
 .voice{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
 .mic{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--paper);border-radius:20px;padding:7px 14px 7px 11px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--accent)}
@@ -228,7 +231,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.5'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.6'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -513,6 +516,28 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
 // ---------- state ----------
 const S = { entries: [], audio: [], photos: [], view: 'cal', tab: 'prompts', month: null, openId: null, select: null, update: '' };
+const MB = 1048576;
+const Store = {
+  u: 0, q: 0, p: null, ok: false,
+  async refresh() {
+    try { const e = await navigator.storage.estimate(); this.u = e.usage || 0; this.q = e.quota || 0; this.ok = this.q > 0; this.p = await navigator.storage.persisted?.(); } catch {}
+    const was = this.wasLow; this.wasLow = this.low(); paintStore();
+    if (was !== undefined && was !== this.wasLow && !Lock.locked && S.view !== 'entry') render();
+    return this;
+  },
+  free() { return Math.max(0, this.q - this.u); },
+  low() { return this.ok && (this.free() < 300 * MB || this.u / this.q > .85); },
+  text() {
+    if (!this.ok) return 'This browser does not report storage.';
+    const f = this.free(), mins = f / (0.36 * MB), room = mins >= 6000 ? 'more than 100 hours' : mins >= 120 ? Math.floor(mins / 60) + ' hours' : Math.floor(mins) + ' minutes';
+    const n = x => x >= 1024 * MB ? (x / 1024 / MB).toFixed(1) + ' GB' : Math.round(x / MB) + ' MB';
+    return `Journal uses ${n(this.u)}. About ${n(f)} free, enough for roughly ${room} of voice notes.`;
+  }
+};
+function paintStore() {
+  $$('.storeLine').forEach(el => { el.textContent = Store.text(); });
+  $$('.storeBar').forEach(el => { el.style.width = Store.ok ? Math.max(2, Math.min(100, Store.u / Store.q * 100)) + '%' : '0'; });
+}
 const urls = new Map();
 const purl = p => { if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); };
 const cur = () => S.entries.find(x => x.id === S.openId);
@@ -577,6 +602,7 @@ const offlineBadge = short => (navigator.serviceWorker && navigator.serviceWorke
 const topbar = (eyebrow, title, right = '') => `<header class="top"><div class="row"><div class="tt"><div class="eyebrow">${esc(eyebrow)}</div><h1>${title}</h1></div>${right}</div></header>`;
 function notices() {
   let h = '';
+  if (Store.low()) h += `<div class="banner warn"><span>⚠︎ Storage is nearly full. ${esc(Store.text())} Back up to iCloud and free some space so new voice notes and photos can be saved.</span></div>`;
   if (S.update) h += `<div class="banner"><span>A new version is ready.</span><button class="btn small pri" data-act="reload">Reload</button></div>`;
   const w = S.audio.filter(a => a.status !== 'recording');
   if (w.length) h += `<div class="banner"><span>🎙 ${w.length} voice note${w.length > 1 ? 's' : ''} not yet turned into text. Open the chapter to see.</span></div>`;
@@ -589,6 +615,7 @@ function render() {
   $('#app').innerHTML = v === 'entry' && cur() ? entryHTML(cur()) : v === 'chapters' ? chaptersHTML() : v === 'book' ? bookHTML() : calHTML();
   $$('textarea').forEach(autosize);
   paintVoice();
+  if (v === 'book') Store.refresh();
 }
 function rerender() { const y = scrollY; render(); scrollTo(0, y); }
 
@@ -728,6 +755,7 @@ function bookHTML() {
     ${list.length ? `<div class="sb">Chapters</div><div class="bcards">${cards}</div>` : ''}
     <div class="tocard"><h3>Turn it into the book</h3><div style="font-size:12.5px;line-height:1.5;color:#4A4036">Send one chapter or the whole journal to Claude. It writes your memoir chapter by chapter, with your photos in place.</div><div class="btns"><button class="btn pri" data-act="send-pick">Send a chapter</button><button class="btn" data-act="export-book">Whole book</button></div></div>
     <div class="safe"><span class="ic">${ico('shield', 20, '#33502A')}</span><div style="flex:1;min-width:0"><b>Stored encrypted on this phone</b><small>${lastB ? 'Last iCloud backup ' + new Date(lastB).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'No iCloud backup yet'}</small></div><button class="btn small" data-act="backup" style="background:#F3E2CF;border-color:#F3E2CF;color:#8E3F1E">Back up</button></div>
+    <div class="safe stor"><div style="flex:1;min-width:0"><b>Phone storage</b><div class="sbar"><i class="storeBar"></i></div><small class="storeLine">${esc(Store.text())}</small></div></div>
   </div>${navHTML('book')}`;
 }
 
@@ -792,6 +820,7 @@ function askPassword(msg) {
   return new Promise(res => { askRes = res; openSheet(`<h3>Backup password</h3><p class="hint" style="margin-top:0">${esc(msg)}</p><label>Password<input id="askPw" type="password" autocomplete="off"></label><div class="btns"><button class="btn pri" data-act="ask-ok" style="flex:1">Continue</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`); });
 }
 function openSettings() {
+  Store.refresh();
   const lastB = +lsGet('tj.lastBackup') || 0;
   openSheet(`<h3>Settings</h3>
     <h2>Privacy lock</h2>
@@ -811,6 +840,9 @@ function openSettings() {
     <div class="btns"><button class="btn" data-act="stt-test">Test connection</button></div><p class="hint" id="sttTest"></p>
     <label style="margin-top:18px">Anthropic API key (for ✨ smart questions and tidying voice text)<input type="password" data-field="key" value="${esc(Vault.apiKey)}" placeholder="sk-ant-…" autocomplete="off"></label>
     <p class="hint">Stored encrypted on this phone. Without a key you still get the fixed questions.</p>
+    <h2 style="margin-top:18px">Storage</h2>
+    <div class="sbar"><i class="storeBar"></i></div><p class="hint storeLine" style="margin-top:0">${esc(Store.text())}</p>
+    ${Store.p === false ? '<p class="hint" style="margin-top:0">If the phone runs very low on space, Safari may clear app data. Keep an iCloud backup.</p>' : ''}
     <h2 style="margin-top:18px">iCloud backup</h2>
     <p class="hint" style="margin-top:0">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive. Backups are encrypted, so you'll need your password to restore one.</p>
     <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" data-change="restore" hidden></label></div>
@@ -899,6 +931,7 @@ function nextTarget(e) {
   return x ? 'qa:' + x.id : 'notes';
 }
 function startRec(e, t) {
+  if (Store.ok && Store.free() < 25 * MB) { toast('Not enough space left on the phone to record. Free some space first.'); return; }
   if (t.startsWith('qa:') && !e.qa.some(x => x.id === t.slice(3))) return;
   saveEntry(e); Rec.start(e, t);
 }
@@ -1271,7 +1304,7 @@ const Rec = {
       this.rescue = new Blob(this.chunks, { type: this.mime });
       openSheet(`<h3>Couldn't save the recording</h3><p class="hint" style="margin-top:0">The phone refused to store it, which usually means it is very low on space. Save the audio as a file now so nothing is lost. You can free some space and add it back by hand.</p><div class="stack"><button class="btn pri" data-act="rec-rescue">Save the audio file</button><button class="btn ghost" data-act="close-sheet">Close</button></div>`);
     }
-    this.chunks = []; this.m = null;
+    this.chunks = []; this.m = null; Store.refresh();
     if (!Lock.locked) { if (S.view === 'entry') rerender(); else paintVoice(); }
     this.res && this.res();
   }
@@ -1441,6 +1474,7 @@ document.addEventListener('visibilitychange', () => {
   else if (Rec.cut) { Rec.cut = false; toast('Recording stopped when you left the app. What you said so far was saved.'); }
   if (!document.hidden && Lock.ready && !Lock.locked && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
   else if (!document.hidden) Stt.run();
+  if (!document.hidden) Store.refresh();
 });
 
 // ---------- lock screen ----------
@@ -1491,7 +1525,7 @@ const Lock = {
   open() {
     this.locked = false; ['#pw1', '#pw2', '#rk'].forEach(i => { $(i).value = ''; }); $('#lock').classList.remove('on');
     if (S.view === 'entry' && !cur()) { S.view = 'cal'; S.openId = null; }
-    render(); scrollTo(0, this.y || 0); Stt.run();
+    render(); scrollTo(0, this.y || 0); Stt.run(); Store.refresh();
   },
   async lock() {
     if (this.locked || !this.ready) return;
