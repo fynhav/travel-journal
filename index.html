@@ -296,7 +296,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.22'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.23'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1056,6 +1056,15 @@ async function addPhotos(files, e) {
   else toast('Photos added');
 }
 
+// the reply should be a JSON list, but take whatever shape it comes in: a list with stray text, or one question per line
+function parseQuestions(text) {
+  const m = (text || '').match(/\[[\s\S]*\]/);
+  if (m) { try { const a = JSON.parse(m[0]).filter(q => typeof q === 'string' && q.trim()); if (a.length) return a; } catch {} }
+  const q = [...(text || '').matchAll(/"([^"\n]{12,}\?)"/g)].map(x => x[1].trim()); if (q.length) return q;
+  const lines = (text || '').split('\n').map(l => l.replace(/^[\s\-*•\d.)"“]+/, '').replace(/[",\s]+$/, '').trim()).filter(l => l.length > 12 && l.endsWith('?'));
+  if (lines.length) return lines;
+  return ((text || '').match(/[^.!?\n"“]{12,}\?/g) || []).map(l => l.trim());
+}
 async function smartQuestions(e, btn) {
   const key = Vault.apiKey;
   if (!key) { openSettings(); toast('Add your Anthropic API key first'); return; }
@@ -1075,19 +1084,19 @@ async function smartQuestions(e, btn) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 600, messages: [{ role: 'user', content:
+      body: JSON.stringify({ model: MODEL, max_tokens: 1000, messages: [{ role: 'user', content:
         `I'm keeping a travel journal that will become a chapter-by-chapter memoir. Here's what I have for this chapter so far:\n\n${ctx}\n\nQuestions already asked:\n${asked || '(none)'}\n\nAsk me 3 short, specific questions about this place and what I've written that would draw out vivid memories: sensory detail, people, moments, feelings. Don't repeat anything already asked. Reply with only a JSON array of 3 strings.` }] })
     });
     if (!r.ok) throw new Error(r.status === 401 ? 'That API key was rejected' : 'Claude returned an error (' + r.status + ')');
     const data = await r.json();
     const text = (data.content || []).map(c => c.text || '').join('');
-    const qs = JSON.parse(text.match(/\[[\s\S]*\]/)[0]).filter(q => typeof q === 'string' && q.trim()).slice(0, 3);
+    const qs = parseQuestions(text).slice(0, 3);
     if (!qs.length) throw new Error('No questions came back');
     qs.forEach(q => e.qa.push({ id: uid(), q: q.trim(), a: '', kind: 'smart' }));
     await saveEntry(e); rerender();
   } catch (err) {
     btn.disabled = false; btn.textContent = '✨ Smart questions';
-    toast(err.message && !err.message.includes('JSON') ? err.message : "Couldn't get smart questions right now");
+    toast(err.message && !/JSON|null|undefined|object/.test(err.message) ? err.message : "Couldn't get smart questions right now. Try again");
   }
 }
 function addFixed(e, n) {
