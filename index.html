@@ -296,7 +296,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.25'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.26'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -997,8 +997,9 @@ async function createEntry(a, b) {
   S.entries.push(e); await saveEntry(e);
   openEntry(e.id);
 }
-function openEntry(id) {
+function openEntry(id, from) {
   const e = S.entries.find(x => x.id === id);
+  S.entryFrom = from || (['cal', 'chapters', 'book'].includes(S.view) ? S.view : 'chapters'); // where Back goes
   S.openId = id; S.view = 'entry'; S.select = null;
   S.tab = e && Object.values(e.days).some(Boolean) ? 'prompts' : 'where';
   render(); scrollTo(0, 0);
@@ -1037,7 +1038,7 @@ async function delEntry(e) {
   S.photos = S.photos.filter(p => p.entryId !== e.id);
   for (const a of S.audio.filter(a => a.entryId === e.id)) await dropAudio(a.id);
   await DB.del('entries', e.id); S.entries = S.entries.filter(x => x.id !== e.id);
-  S.view = 'cal'; S.openId = null; render();
+  S.view = 'chapters'; S.openId = null; render();
 }
 async function addPhotos(files, e) {
   toast(`Adding ${files.length} photo${files.length > 1 ? 's' : ''}…`);
@@ -1814,7 +1815,7 @@ document.addEventListener('click', async ev => {
     case 'sel-cancel': S.select = null; rerender(); break;
     case 'sel-ok': { const [a, b] = [S.select.a, S.select.b].sort(); createEntry(a, b); break; }
     case 'open': openEntry(t.dataset.id); break;
-    case 'back': flush(); S.view = 'cal'; S.openId = null; render(); scrollTo(0, 0); break;
+    case 'back': flush(); S.view = S.entryFrom || 'chapters'; S.openId = null; render(); scrollTo(0, 0); break;
     case 'nav': flush(); S.view = t.dataset.v; S.openId = null; render(); scrollTo(0, 0); break;
     case 'goto': { const d = parse(t.dataset.m); S.month = new Date(d.getFullYear(), d.getMonth(), 1); render(); break; }
     case 'tab': S.tab = t.dataset.tab; rerender(); break;
@@ -1842,7 +1843,7 @@ document.addEventListener('click', async ev => {
     case 'current': {
       flush(); const today = iso(new Date()), list = chapters();
       const x = entryOn(today) || [...list].reverse().find(c => c.end <= today) || list[list.length - 1];
-      if (x) { S.view = 'entry'; openEntry(x.id); } else daySheet(today);
+      if (x) openEntry(x.id, 'chapters'); else daySheet(today);
       break;
     }
     case 'rec-next': startRec(e, nextTarget(e)); break;
