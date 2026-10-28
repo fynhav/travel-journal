@@ -296,7 +296,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.26'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.27'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -662,7 +662,7 @@ const SCENES = [
 ];
 const chTitle = e => e.title || Object.values(e.days).find(Boolean) || '';
 function cover(e) {
-  const p = photosOf(e)[0];
+  const ps = photosOf(e), p = ps.find(x => x.id === e.coverId) || ps[0];
   if (p) return `<img src="${purl(p)}" alt="">`;
   const h = [...(chTitle(e) + e.id)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   return `<svg viewBox="0 0 160 112" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${SCENES[h % 3]('sc' + (++sceneN))}</svg>`;
@@ -983,10 +983,12 @@ function openPhoto(id) {
   const p = S.photos.find(x => x.id === id), e = cur();
   const days = range(e.start, e.end);
   if (!days.includes(p.day)) days.unshift(p.day);
+  const ps = photosOf(e), isCover = (ps.find(x => x.id === e.coverId) || ps[0]) === p;
   openSheet(`<img class="big" src="${purl(p)}" alt="">
     <label>Caption<textarea data-field="pcap" data-id="${id}" placeholder="What's happening here?">${esc(p.caption)}</textarea></label>
     <label>Day<select data-change="pday" data-id="${id}">${days.map(d => `<option value="${d}"${d === p.day ? ' selected' : ''}>${fmt(d, SHORT)}</option>`).join('')}</select></label>
     <label>Place, if different from that day<input data-field="pplace" data-id="${id}" value="${esc(p.place)}" placeholder="${esc(e.days[p.day] || 'Same as the day')}" autocomplete="off"></label>
+    ${isCover ? '<p class="hint" style="margin:0">✓ This is the chapter\'s cover photo.</p>' : `<button class="btn" data-act="set-cover" data-id="${id}">Use as the chapter cover</button>`}
     <div class="btns"><button class="btn pri" data-act="close-sheet" style="flex:1">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete photo</button></div>`);
 }
 
@@ -1858,6 +1860,7 @@ document.addEventListener('click', async ev => {
     case 'smart-q': smartQuestions(e, t, !!t.dataset.redo); break;
     case 'rm-q': { const x = e.qa[+t.dataset.i]; if (x.a.trim() && !confirm('Remove this question and your answer?')) break; for (const a of S.audio.filter(a => a.t === 'qa:' + x.id)) await dropAudio(a.id); e.qa.splice(+t.dataset.i, 1); saveEntry(e); rerender(); break; }
     case 'photo': openPhoto(t.dataset.id); break;
+    case 'set-cover': { e.coverId = t.dataset.id; await saveEntry(e); closeSheet(); rerender(); toast('Cover photo changed'); break; }
     case 'del-photo': {
       if (!confirm('Delete this photo from the journal?')) break;
       const id = t.dataset.id; timers.delete('p' + id);
