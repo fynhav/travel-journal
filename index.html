@@ -296,7 +296,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.24'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.25'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1059,8 +1059,8 @@ async function addPhotos(files, e) {
 // the reply should be a JSON list, but take whatever shape it comes in: a list with stray text, or one question per line
 const SMART_SYS = `You help a traveller remember a trip so they can tell its story in a memoir. Write the questions a curious friend would ask over dinner when they get back, not a questionnaire.
 - Anchor every question in something specific from what they wrote: a place, a day, a person, something they mentioned. If they have written little, anchor it in the place and the dates.
-- Ask about what happened, not about senses. Good questions go to events, decisions, people and surprises: how they ended up somewhere, what someone said, what went wrong, what they expected compared with what they found, what they would tell a friend about it first.
-- Never ask them to "describe" something. Never use stock prompts such as "what did it smell like", "what sounds do you remember", "what was the vibe", "how did it make you feel", "what stood out" or "what was the highlight".
+- Ask mostly about what happened, not about senses; a question about how something felt is fine now and then, as long as it is about a specific moment. Good questions go to events, decisions, people and surprises: how they ended up somewhere, what someone said, what went wrong, what they expected compared with what they found, what they would tell a friend about it first.
+- Never ask them to "describe" something. Never use stock prompts such as "what did it smell like", "what sounds do you remember", "what was the vibe", "what stood out" or "what was the highlight".
 - Mix the shapes of the three questions: one that opens a story ("How did you end up…", "What happened when…"), one about a person or a conversation, and one about a choice, a mishap or a small odd detail.
 - Plain spoken, one sentence each, under 22 words, easy to answer out loud.
 - Reply with only a JSON array of exactly 3 strings.`;
