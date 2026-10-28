@@ -296,7 +296,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.23'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.24'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -848,7 +848,7 @@ function entryHTML(e) {
         ? `<input data-field="qq" data-i="${i}" value="${esc(x.q)}" placeholder="Your own heading">`
         : `<div class="q">${x.kind === 'smart' ? '✨ ' : ''}${esc(x.q)}</div>`}${x.a.trim() ? `<span class="ckk">${ico('check', 13, '#33502A', 3)}</span>` : ''}<button class="x" data-act="rm-q" data-i="${i}" aria-label="Remove question">×</button></div><textarea data-field="qa" data-i="${i}" placeholder="Type, or tap Record and talk…">${esc(x.a)}</textarea><div class="voice" data-t="qa:${esc(x.id || (x.id = uid()))}"></div></div>`).join('')
       || '<p class="hint">No questions yet.</p>';
-    body += `<div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q">✨ Smart questions</button><button class="btn" data-act="own-q">+ My own</button></div>`;
+    body += `<div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q"${e.qa.some(x => x.kind === 'smart' && !x.a.trim()) ? ' data-redo="1">↻ New questions' : '>✨ Smart questions'}</button><button class="btn" data-act="own-q">+ My own</button></div>`;
   } else if (tab === 'photos') {
     body = `<section class="sec"><div class="photos">${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}<label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*" multiple data-change="photos" hidden></label></div></section>`;
   } else if (tab === 'notes') {
@@ -1057,6 +1057,13 @@ async function addPhotos(files, e) {
 }
 
 // the reply should be a JSON list, but take whatever shape it comes in: a list with stray text, or one question per line
+const SMART_SYS = `You help a traveller remember a trip so they can tell its story in a memoir. Write the questions a curious friend would ask over dinner when they get back, not a questionnaire.
+- Anchor every question in something specific from what they wrote: a place, a day, a person, something they mentioned. If they have written little, anchor it in the place and the dates.
+- Ask about what happened, not about senses. Good questions go to events, decisions, people and surprises: how they ended up somewhere, what someone said, what went wrong, what they expected compared with what they found, what they would tell a friend about it first.
+- Never ask them to "describe" something. Never use stock prompts such as "what did it smell like", "what sounds do you remember", "what was the vibe", "how did it make you feel", "what stood out" or "what was the highlight".
+- Mix the shapes of the three questions: one that opens a story ("How did you end up…", "What happened when…"), one about a person or a conversation, and one about a choice, a mishap or a small odd detail.
+- Plain spoken, one sentence each, under 22 words, easy to answer out loud.
+- Reply with only a JSON array of exactly 3 strings.`;
 function parseQuestions(text) {
   const m = (text || '').match(/\[[\s\S]*\]/);
   if (m) { try { const a = JSON.parse(m[0]).filter(q => typeof q === 'string' && q.trim()); if (a.length) return a; } catch {} }
@@ -1065,7 +1072,7 @@ function parseQuestions(text) {
   if (lines.length) return lines;
   return ((text || '').match(/[^.!?\n"“]{12,}\?/g) || []).map(l => l.trim());
 }
-async function smartQuestions(e, btn) {
+async function smartQuestions(e, btn, redo) {
   const key = Vault.apiKey;
   if (!key) { openSettings(); toast('Add your Anthropic API key first'); return; }
   if (!navigator.onLine) { addFixed(e, 2); toast('No signal, so here are two fixed questions'); return; }
@@ -1079,23 +1086,27 @@ async function smartQuestions(e, btn) {
     e.notes.trim() ? `Notes: ${e.notes.trim()}` : '',
     ...photosOf(e).filter(p => p.caption).map(p => `Photo: ${p.caption}`)
   ].filter(Boolean).join('\n');
-  const asked = e.qa.map(x => x.q).filter(Boolean).join('\n');
+  const asked = [...e.qa.map(x => x.q), ...(e.skipQ || [])].filter(Boolean).join('\n');
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1000, messages: [{ role: 'user', content:
-        `I'm keeping a travel journal that will become a chapter-by-chapter memoir. Here's what I have for this chapter so far:\n\n${ctx}\n\nQuestions already asked:\n${asked || '(none)'}\n\nAsk me 3 short, specific questions about this place and what I've written that would draw out vivid memories: sensory detail, people, moments, feelings. Don't repeat anything already asked. Reply with only a JSON array of 3 strings.` }] })
+      body: JSON.stringify({ model: MODEL, max_tokens: 1000, system: SMART_SYS, messages: [{ role: 'user', content:
+        `Here is what I have for this chapter of my travel journal so far:\n\n${ctx}\n\nQuestions already asked (do not repeat or rephrase any of them):\n${asked || '(none)'}\n\nGive me 3 new questions.` }] })
     });
     if (!r.ok) throw new Error(r.status === 401 ? 'That API key was rejected' : 'Claude returned an error (' + r.status + ')');
     const data = await r.json();
     const text = (data.content || []).map(c => c.text || '').join('');
     const qs = parseQuestions(text).slice(0, 3);
     if (!qs.length) throw new Error('No questions came back');
+    if (redo) { // swap the unanswered smart questions for the new ones, remembering the old so they don't come back
+      const busy = new Set(S.audio.filter(a => a.entryId === e.id).map(a => a.t)), drop = e.qa.filter(x => x.kind === 'smart' && !x.a.trim() && !busy.has('qa:' + x.id));
+      e.skipQ = [...(e.skipQ || []), ...drop.map(x => x.q)].slice(-30); e.qa = e.qa.filter(x => !drop.includes(x));
+    }
     qs.forEach(q => e.qa.push({ id: uid(), q: q.trim(), a: '', kind: 'smart' }));
     await saveEntry(e); rerender();
   } catch (err) {
-    btn.disabled = false; btn.textContent = '✨ Smart questions';
+    btn.disabled = false; btn.textContent = redo ? '↻ New questions' : '✨ Smart questions';
     toast(err.message && !/JSON|null|undefined|object/.test(err.message) ? err.message : "Couldn't get smart questions right now. Try again");
   }
 }
@@ -1843,7 +1854,7 @@ document.addEventListener('click', async ev => {
     case 'std-q': applyStd(e); saveEntry(e); rerender(); break;
     case 'more-q': if (addFixed(e, 1)) { const ts = $$('textarea[data-field="qa"]'); ts[ts.length - 1]?.focus(); } break;
     case 'own-q': { e.qa.push({ id: uid(), q: '', a: '', kind: 'own' }); saveEntry(e); rerender(); const ins = $$('input[data-field="qq"]'); ins[ins.length - 1]?.focus(); break; }
-    case 'smart-q': smartQuestions(e, t); break;
+    case 'smart-q': smartQuestions(e, t, !!t.dataset.redo); break;
     case 'rm-q': { const x = e.qa[+t.dataset.i]; if (x.a.trim() && !confirm('Remove this question and your answer?')) break; for (const a of S.audio.filter(a => a.t === 'qa:' + x.id)) await dropAudio(a.id); e.qa.splice(+t.dataset.i, 1); saveEntry(e); rerender(); break; }
     case 'photo': openPhoto(t.dataset.id); break;
     case 'del-photo': {
