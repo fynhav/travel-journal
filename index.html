@@ -264,6 +264,13 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 #sheet.full .sec .btns{margin-top:12px}
 #sheet.full .sec p.hint:last-child{margin-bottom:0}
 .sec .hint + .btns,.sec .hint + label{margin-top:12px}
+#sheet .pform{display:flex;flex-direction:column;gap:14px;margin-top:16px}
+#sheet .pform textarea{min-height:64px}
+.coverbtn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;height:50px;margin-top:20px;border:1.5px solid #EBCFB8;border-radius:25px;background:#FBEFE4;color:var(--accent);font-weight:700;font-size:15px;cursor:pointer}
+.coverbtn.on{background:#E9F1E3;border-color:#CFE0C4;color:#33502A;cursor:default}
+#sheet .pact{display:flex;gap:10px;margin-top:14px;padding-top:16px;border-top:1px solid #F0E8D8}
+#sheet .pact .btn{height:48px;margin:0}
+#sheet .pact .pri{flex:1}
 img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;background:var(--paper);display:block}
 #lock{position:fixed;inset:0;z-index:100;background:var(--paper);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
 #lock.on{display:flex}
@@ -296,7 +303,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-10-27.27'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-10-27.28'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -985,11 +992,13 @@ function openPhoto(id) {
   if (!days.includes(p.day)) days.unshift(p.day);
   const ps = photosOf(e), isCover = (ps.find(x => x.id === e.coverId) || ps[0]) === p;
   openSheet(`<img class="big" src="${purl(p)}" alt="">
-    <label>Caption<textarea data-field="pcap" data-id="${id}" placeholder="What's happening here?">${esc(p.caption)}</textarea></label>
-    <label>Day<select data-change="pday" data-id="${id}">${days.map(d => `<option value="${d}"${d === p.day ? ' selected' : ''}>${fmt(d, SHORT)}</option>`).join('')}</select></label>
-    <label>Place, if different from that day<input data-field="pplace" data-id="${id}" value="${esc(p.place)}" placeholder="${esc(e.days[p.day] || 'Same as the day')}" autocomplete="off"></label>
-    ${isCover ? '<p class="hint" style="margin:0">✓ This is the chapter\'s cover photo.</p>' : `<button class="btn" data-act="set-cover" data-id="${id}">Use as the chapter cover</button>`}
-    <div class="btns"><button class="btn pri" data-act="close-sheet" style="flex:1">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete photo</button></div>`);
+    <div class="pform">
+      <label>Caption<textarea data-field="pcap" data-id="${id}" placeholder="What's happening here?">${esc(p.caption)}</textarea></label>
+      <label>Day<select data-change="pday" data-id="${id}">${days.map(d => `<option value="${d}"${d === p.day ? ' selected' : ''}>${fmt(d, SHORT)}</option>`).join('')}</select></label>
+      <label>Place, if different from that day<input data-field="pplace" data-id="${id}" value="${esc(p.place)}" placeholder="${esc(e.days[p.day] || 'Same as the day')}" autocomplete="off"></label>
+    </div>
+    ${isCover ? `<div class="coverbtn on">${ico('check', 17, '#33502A', 2.6)}This is the chapter cover</div>` : `<button class="coverbtn" data-act="set-cover" data-id="${id}">${ico('img', 18, '#B5562F', 2)}Use as the chapter cover</button>`}
+    <div class="pact"><button class="btn pri" data-act="close-sheet">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete photo</button></div>`);
 }
 
 // ---------- actions ----------
