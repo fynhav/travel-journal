@@ -303,7 +303,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-03.1'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-03.2'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1320,7 +1320,7 @@ const Stt = {
       if (Lock.gen !== gen) return;
       if (ctl.signal.reason === 'restart') { m.nerr = 0; setTimeout(() => this.run(), 300); }
       else if (er.net && !navigator.onLine) { this.stall = true; /* stays queued until there is signal */ }
-      else if (er.net && (m.nerr = (m.nerr || 0) + 1) < 4) { this.stall = true; try { await saveAudioMeta(m); } catch {} /* weak signal: try again in a while */ }
+      else if (er.net && (m.nerr = (m.nerr || 0) + 1) < 4) { m.why = er.message; this.stall = true; try { await saveAudioMeta(m); } catch {} /* weak signal: try again in a while */ }
       else { m.status = 'failed'; m.err = er.message || 'Something went wrong'; try { await saveAudioMeta(m); } catch {} }
     } finally { clearTimeout(tm); delete this.ctl[id]; delete this.t0[id]; this.busy.delete(id); paintVoice(); if (S.view === 'cal') rerender(); }
   }
@@ -1436,7 +1436,10 @@ function voiceInner(e, t) {
   for (const a of mine) {
     if (Stt.busy.has(a.id)) { const el = Math.round((Date.now() - (Stt.t0[a.id] || Date.now())) / 1000); h += `<span class="vchip">⏳ Turning ${fmtDur(a.dur)} of speech into text… ${el >= 10 ? Math.floor(el / 60) + ':' + String(el % 60).padStart(2, '0') : ''}${el >= 60 ? '<button data-act="v-restart" data-id="' + a.id + '">Restart</button>' : ''}</span>`; }
     else if (a.status === 'failed') h += `<span class="vchip bad">⚠︎ ${esc(a.err || 'Failed')}. Your recording is safe on this phone.<button data-act="v-retry" data-id="${a.id}">Retry</button><button data-act="v-del" data-id="${a.id}">Delete</button></span>`;
-    else h += `<span class="vchip">🎙 ${fmtDur(a.dur)} saved, ${Stt.ready() ? (navigator.onLine ? 'waiting' : 'waiting for signal') : 'needs a key in Settings'}<button data-act="v-del" data-id="${a.id}">Delete</button></span>`;
+    else {
+      const why = !Stt.ready() ? 'needs a key in Settings' : !navigator.onLine ? 'waiting for signal' : Stt.running ? 'next in line, another recording is being turned into text first' : a.nerr ? `the last try didn't get through (${esc(a.why || 'weak signal')}). It tries again within 30 seconds` : 'starting any moment';
+      h += `<span class="vchip">🎙 ${fmtDur(a.dur)} saved, ${why}${Stt.ready() && navigator.onLine ? `<button data-act="v-retry" data-id="${a.id}">Do it now</button>` : ''}<button data-act="v-del" data-id="${a.id}">Delete</button></span>`;
+    }
   }
   return h + `<button class="mic" data-act="rec" data-t="${esc(t)}"${Rec.active ? ' disabled' : ''}>🎙 Record</button>`;
 }
@@ -1886,7 +1889,7 @@ document.addEventListener('click', async ev => {
     case 'rec': startRec(e, t.dataset.t); break;
     case 'rec-stop': Rec.stop(); break;
     case 'v-restart': { const c = Stt.ctl[t.dataset.id]; if (c) c.abort('restart'); break; }
-    case 'v-retry': { const a = S.audio.find(x => x.id === t.dataset.id); if (a) { a.status = 'pending'; a.err = ''; await saveAudioMeta(a); paintVoice(); Stt.run(); } break; }
+    case 'v-retry': { const a = S.audio.find(x => x.id === t.dataset.id); if (a) { a.status = 'pending'; a.err = ''; a.nerr = 0; await saveAudioMeta(a); paintVoice(); Stt.run(); } break; }
     case 'v-del': if (confirm('Delete this recording? It has not been turned into text yet.')) { await dropAudio(t.dataset.id); paintVoice(); if (S.view === 'cal') rerender(); } break;
     case 'stt-test': testStt(); break;
     case 'check-update': checkUpdate(); break;
