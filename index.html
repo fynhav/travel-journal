@@ -236,6 +236,30 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .rt0{stroke:#B5562F;stroke-opacity:.38;stroke-width:2.5;stroke-dasharray:2 7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .rt1{stroke:#B5562F;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .rf1{stroke:#B5562F;stroke-width:3;stroke-dasharray:9 7;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.rs1{stroke:#2F7F86;stroke-width:4;stroke-dasharray:.5 7;stroke-linecap:round;vector-effect:non-scaling-stroke}
+.rehl{stroke:#F1C7AA;stroke-opacity:.85;stroke-width:13;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.reln{stroke:#B5562F;stroke-opacity:.55;stroke-width:1.5;vector-effect:non-scaling-stroke}
+#redit{position:fixed;inset:0;z-index:75;background:var(--paper);display:none;flex-direction:column}
+#redit.on{display:flex}
+#redit .top{position:relative;flex:none}
+#rebox{flex:1;min-height:0;position:relative;overflow:hidden;background:#DCE8E6;touch-action:none;user-select:none;-webkit-user-select:none}
+#resvg{position:absolute;inset:0;width:100%;height:100%}
+#redots{position:absolute;inset:0;pointer-events:none}
+.hd{position:absolute;left:0;top:0;width:44px;height:44px;border:0;background:none;padding:0;pointer-events:auto;touch-action:none;cursor:grab;will-change:transform}
+.hd i{position:absolute;left:8px;top:8px;width:28px;height:28px;border-radius:50%;box-sizing:border-box;font-style:normal;font-weight:800;font-size:12px;line-height:23px;text-align:center}
+.hd.wp i{background:var(--accent);color:#fff;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(80,50,20,.4)}
+.hd.wp.sel i{box-shadow:0 0 0 4px rgba(181,86,47,.35),0 2px 8px rgba(80,50,20,.4)}
+.hd.ch i{left:12px;top:12px;width:20px;height:20px;background:#fff;border:3px solid var(--accent);box-shadow:0 2px 6px rgba(80,50,20,.3)}
+.ep{position:absolute;left:0;top:0;width:0;height:0;pointer-events:none;will-change:transform}
+.ep i{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;background:#2E2823;border:2.5px solid #fff;box-sizing:border-box}
+.ep span{position:absolute;left:11px;top:-10px;white-space:nowrap;font-weight:700;font-size:11.5px;line-height:1;color:#2E2823;background:rgba(255,253,248,.92);border-radius:9px;padding:4px 7px;box-shadow:0 1px 4px rgba(80,50,20,.18)}
+.rebar{flex:none;background:var(--card);border-radius:28px 28px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 14px);box-shadow:0 -6px 24px rgba(120,90,50,.14);margin-top:-22px;position:relative;z-index:2}
+.rechips{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px}
+.rchip{flex:none;border:1.5px solid #E6D9C3;background:#FFFDF8;border-radius:16px;padding:7px 12px;font-weight:700;font-size:13px;color:var(--ink,#3a3128);cursor:pointer}
+.rchip.on{background:#F3DCCB;border-color:var(--accent)}
+.rebar .rh{font-size:12.5px;line-height:1.4;color:#6B5F50;margin:8px 0 0}
+.rebar .btns{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.rebar .btn[disabled]{opacity:.4}
 .mleg{margin-top:10px;padding-top:10px;border-top:1px solid #F0E8D8}
 .mlh{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;min-width:0}
 .mlh span{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -329,12 +353,13 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 <button class="btn ghost small" id="lockErase" data-act="erase" hidden>No recovery key? Erase and start again</button>
 <button class="btn ghost small" id="lockUpdBtn" data-act="lock-update">Check for updates</button><p class="hint" id="lockUpd" style="margin:2px 0 0;text-align:center"></p></div>
 <div id="recov" aria-live="polite"></div>
+<div id="redit"></div>
 <div id="toast"></div>
 <script>
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.1'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.2'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1810,6 +1835,12 @@ async function roadRoute(a, b, via = []) {
   for (const t of tries) { try { return await t(); } catch (e) { errs.push(String(e && e.message || e).slice(0, 40)); } }
   throw new Error(errs.join(', '));
 }
+const MODES = { road: ['🚗', 'Drove'], sail: ['⛵', 'Sailed'], fly: ['✈︎', 'Flew'] };
+const proj = ll => [mx(ll[1]), my(ll[0])];
+const ll4 = q => { const [la, lo] = unproj(q[0], q[1]); return [+la.toFixed(4), +lo.toFixed(4)]; };
+const thirds = (p, q) => [[p[0] + (q[0] - p[0]) / 3, p[1] + (q[1] - p[1]) / 3], [p[0] + (q[0] - p[0]) * 2 / 3, p[1] + (q[1] - p[1]) * 2 / 3]];
+const partCtl = (A, k, q) => q.h ? [proj(q.h.slice(0, 2)), proj(q.h.slice(2))] : thirds(A[k], A[k + 1]);
+const curveSeg = (p, q, c) => 'C' + c[0][0].toFixed(1) + ' ' + c[0][1].toFixed(1) + ' ' + c[1][0].toFixed(1) + ' ' + c[1][1].toFixed(1) + ' ' + q[0].toFixed(1) + ' ' + q[1].toFixed(1);
 const MapV = {
   world: null, alive: false, auto: true, vb: null, W: 0, H: 0, all: [], pts: [], idx: 0, timer: 0, cam: 0, ptr: new Map(), placing: '', busy: false, tried: new Set(), fitW: 0, drag: null,
   destroy() { this.ro?.disconnect(); this.alive = false; clearInterval(this.timer); this.timer = 0; cancelAnimationFrame(this.cam); this.ptr.clear(); },
@@ -1856,13 +1887,15 @@ const MapV = {
     try { const w = await this.loadWorld(); if (!this.alive) return; this.drawLand(w); } catch { const n = $('#mapnote'); if (n) n.dataset.nomap = '1'; }
   },
   drawLand(w) {
-    const g = $('#land'); if (!g) return;
+    const g = $('#land'); if (!g) return; g.innerHTML = this.landHTML(w);
+  },
+  landHTML(w) {
     const vis = new Set(this.all.map(x => x.cc).filter(Boolean));
     const base = w.filter(c => !vis.has(c.cc)).map(c => c.d).join('');
     let h = `<path d="${base}" class="ld"/>`;
     const names = [...new Set(this.all.map(x => x.country).filter(Boolean))];
     for (const c of w.filter(c => c.cc && vis.has(c.cc))) { const nm = names.find(n => ccOf(n) === c.cc) || c.name, p = pal(nm); h += `<path d="${c.d}" class="ld vis" style="fill:${p.bg};stroke:${p.bd}"/>`; }
-    g.innerHTML = h;
+    return h;
   },
   fit(anim) {
     const P = this.pts; let cx = 0, cy = 0, w = 0;
@@ -1914,60 +1947,101 @@ const MapV = {
     this.route();
   },
   route() {
-    const q = this.legPaths(this.idx), a = $('#rt1'), b = $('#rf1'); if (a) a.setAttribute('d', q.road); if (b) b.setAttribute('d', q.str);
+    const q = this.legPaths(this.idx), a = $('#rt1'), b = $('#rf1'), c = $('#rs1'); if (a) a.setAttribute('d', q.road); if (b) b.setAttribute('d', q.str); if (c) c.setAttribute('d', q.sail);
   },
-  // ----- how each leg was travelled: by road follows the real driving route, otherwise a straight line -----
+  // ----- how each trip between two stops was travelled -----
+  // A leg is one or more parts (drove, sailed or flew) joined at points you can move; a part by road follows the real route,
+  // a part by sea or air is a line you can bend with two handles. Old records (one mode per leg) are upgraded as they are read.
   lk(i) { return 'leg:' + this.pts[i - 1].key + '>' + this.pts[i].key; },
-  rec(i) { return Vault.geo && Vault.geo[this.lk(i)] || null; },
-  stale(i, r) { const a = this.pts[i - 1].ll, b = this.pts[i].ll; return !r.a || !r.b || Math.abs(r.a[0] - a[0]) > .02 || Math.abs(r.a[1] - a[1]) > .02 || Math.abs(r.b[0] - b[0]) > .02 || Math.abs(r.b[1] - b[1]) > .02; },
-  geom(i) {
-    const r = this.rec(i); if (!r || r.m !== 'road' || !r.p || this.stale(i, r)) return null;
-    if (!r._x) { const x = []; for (let k = 0; k + 1 < r.p.length; k += 2) x.push([mx(r.p[k + 1]), my(r.p[k])]); Object.defineProperty(r, '_x', { value: x, writable: true, configurable: true, enumerable: false }); }
-    return r._x;
-  },
-  needs(i) { const r = this.rec(i); return !!r && r.m === 'road' && !!(r.redo || !r.none && (!r.p || r.v !== 2 || this.stale(i, r))); },
-  legPaths(upTo) {
-    let road = '', str = '', all = '';
-    for (let i = 1; i <= upTo && i < this.pts.length; i++) {
-      const a = this.pts[i - 1], b = this.pts[i], g = this.geom(i), m = 'M' + a.x.toFixed(1) + ' ' + a.y.toFixed(1);
-      const seg = g ? smoothD([[a.x, a.y], ...g, [b.x, b.y]]) : m + 'L' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
-      all += seg; if (g) road += seg; else str += seg;
+  mk(m, old) { return m === 'road' ? (old && old.m === 'road' ? { ...old, none: 0, redo: 1 } : { m, redo: 1 }) : { m, ...(old && old.h ? { h: old.h } : {}) }; },
+  leg(i) {
+    const k = this.lk(i), a = this.pts[i - 1].ll, b = this.pts[i].ll; let r = Vault.geo && Vault.geo[k]; if (!r) return null;
+    if (r.v !== 3) {
+      const wp = r.via && r.via.length ? r.via.map(v => [v[0], v[1]]) : [];
+      if (r.m === 'road') r = { v: 3, a: r.a || a, b: r.b || b, wp, parts: wp.length ? [...Array(wp.length + 1)].map(() => ({ m: 'road', redo: 1 })) : [{ m: 'road', ...(r.p ? { p: r.p, km: r.km } : {}), ...(r.none ? { none: 1 } : {}), ...(r.redo || (r.p && r.v !== 2) ? { redo: 1 } : {}) }] };
+      else r = { v: 3, a, b, wp: [], parts: [{ m: 'fly' }] };
+      Vault.geo[k] = r;
     }
-    return { road, str, all };
+    if (!r.a || !r.b || Math.abs(r.a[0] - a[0]) > .02 || Math.abs(r.a[1] - a[1]) > .02 || Math.abs(r.b[0] - b[0]) > .02 || Math.abs(r.b[1] - b[1]) > .02) { // a stop was moved: the old shape no longer fits
+      const m = r.parts[0].m; r = Vault.geo[k] = { v: 3, a, b, wp: [], parts: [this.mk(m)] };
+    }
+    return r;
+  },
+  ensure(i) { const k = this.lk(i); Vault.geo ||= {}; if (!this.leg(i)) Vault.geo[k] = { v: 3, a: this.pts[i - 1].ll, b: this.pts[i].ll, wp: [], parts: [{ m: 'fly' }] }; return this.leg(i); },
+  anchors(i) { const r = this.leg(i), a = this.pts[i - 1], b = this.pts[i]; return [[a.x, a.y], ...(r ? r.wp : []).map(proj), [b.x, b.y]]; },
+  setP(q, flat) { q.p = flat; q._x = undefined; },
+  partGeom(r, k) {
+    const q = r.parts[k]; if (q.m !== 'road' || !q.p) return null;
+    if (!q._x) { const x = []; for (let j = 0; j + 1 < q.p.length; j += 2) x.push([mx(q.p[j + 1]), my(q.p[j])]); Object.defineProperty(q, '_x', { value: x, writable: true, configurable: true, enumerable: false }); }
+    return q._x;
+  },
+  partD(r, A, k) {
+    const q = r.parts[k], p = A[k], n = A[k + 1], g = this.partGeom(r, k), f = z => z[0].toFixed(1) + ' ' + z[1].toFixed(1);
+    if (g) return { d: smoothD([p, ...g, n]), kind: 'road' };
+    return { d: q.h && q.m !== 'road' ? 'M' + f(p) + curveSeg(p, n, partCtl(A, k, q)) : 'M' + f(p) + 'L' + f(n), kind: q.m === 'sail' ? 'sail' : 'str' };
+  },
+  needs(i) { const r = this.leg(i); return !!r && r.parts.some(q => q.m === 'road' && (q.redo || (!q.none && !q.p))); },
+  legPaths(upTo) {
+    let road = '', str = '', sail = '', all = '';
+    for (let i = 1; i <= upTo && i < this.pts.length; i++) {
+      const r = this.leg(i), A = this.anchors(i);
+      if (!r) { const d = 'M' + A[0][0].toFixed(1) + ' ' + A[0][1].toFixed(1) + 'L' + A[1][0].toFixed(1) + ' ' + A[1][1].toFixed(1); all += d; str += d; continue; }
+      r.parts.forEach((_, k) => { const { d, kind } = this.partD(r, A, k); all += d; if (kind === 'road') road += d; else if (kind === 'sail') sail += d; else str += d; });
+    }
+    return { road, str, sail, all };
+  },
+  legKm(i) {
+    const r = this.leg(i), a = this.pts[i - 1].ll, b = this.pts[i].ll; if (!r) return hav(a, b);
+    const A = this.anchors(i), L = [a, ...r.wp, b]; let km = 0;
+    r.parts.forEach((q, k) => {
+      if (q.m === 'road' && q.p && q.km) km += q.km;
+      else if (q.h && q.m !== 'road') { const c = partCtl(A, k, q); let prev = L[k]; for (let st = 1; st <= 16; st++) { const t = st / 16, u = 1 - t, f = j => u * u * u * A[k][j] + 3 * u * u * t * c[0][j] + 3 * u * t * t * c[1][j] + t * t * t * A[k + 1][j], pt = unproj(f(0), f(1)); km += hav(prev, pt); prev = pt; } }
+      else km += hav(L[k], L[k + 1]);
+    });
+    return km;
   },
   legRow() {
     const i = this.idx; if (i < 1 || !this.pts[i]) return '';
-    const r = this.rec(i), road = !!r && r.m === 'road', a = this.pts[i - 1];
-    let st = 'Straight line. Choose Drove to follow the main roads.';
-    if (road) st = this.geom(i) ? `Following the main roads · ${r.km} km. Tap Drove again to redo it.` : r.none ? 'No road route found, so it stays a straight line.' : navigator.onLine ? (this.lastErr ? `Couldn’t get the route (${esc(this.lastErr)}). Tap Drove to try again.` : 'Finding the road route…') : 'The route is drawn when you next have signal.';
-    else if (r) st = 'Straight line, like a flight.';
-    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg"><button data-act="leg" data-m="fly" class="${r && !road ? 'on' : ''}">✈︎ Flew</button><button data-act="leg" data-m="road" class="${road ? 'on' : ''}">🚗 Drove</button></div>${road ? `<div class="mvia"><button class="btn small" data-act="leg-via">＋ Route via a point</button>${r.via && r.via.length ? `<button class="btn small" data-act="leg-via-clear">Clear ${r.via.length} point${r.via.length > 1 ? 's' : ''}</button>` : ''}</div>` : ''}</div>`;
+    const r = this.leg(i), a = this.pts[i - 1], ms = r ? [...new Set(r.parts.map(q => q.m))] : [], one = ms.length === 1 ? ms[0] : '';
+    let st = 'Straight line. Choose how you got here.';
+    if (r) {
+      const km = Math.round(this.legKm(i)), roads = r.parts.filter(q => q.m === 'road');
+      if (ms.length > 1) st = `A mix: ${r.parts.map(q => MODES[q.m].join(' ')).join(', then ')} · about ${km} km.`;
+      else if (one === 'road') st = roads.some(q => q.none) ? 'No road route found, so it stays a straight line.' : roads.every(q => q.p) ? `Following the main roads · ${km} km. Tap Drove again to redo it.` : navigator.onLine ? (this.lastErr ? `Couldn’t get the route (${esc(this.lastErr)}). Tap Drove to try again.` : 'Finding the road route…') : 'The route is drawn when you next have signal.';
+      else if (one === 'sail') st = `Sailed · about ${km} km. Bend it or add points with Edit route.`;
+      else st = r.wp.length || r.parts.some(q => q.h) ? `Flew · about ${km} km.` : 'Straight line, like a flight.';
+    }
+    const b = m => `<button data-act="leg" data-m="${m}" class="${one === m ? 'on' : ''}">${MODES[m].join(' ')}</button>`;
+    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg">${b('fly')}${b('road')}${b('sail')}</div><div class="mvia"><button class="btn small" data-act="re-open">✎ Edit route on a map</button></div></div>`;
   },
   async setLeg(m) {
-    const i = this.idx; if (i < 1 || !this.pts[i]) return; Vault.geo ||= {};
-    const old = this.rec(i); Vault.geo[this.lk(i)] = m === 'road' ? (old && old.m === 'road' ? { ...old, none: 0, redo: 1 } : { m: 'road', a: this.pts[i - 1].ll, b: this.pts[i].ll }) : { m: 'fly' };
+    const i = this.idx; if (i < 1 || !this.pts[i]) return;
+    const r = this.ensure(i); r.parts = r.parts.map(q => q.m === m ? (m === 'road' ? this.mk(m, q) : q) : this.mk(m, q));
     await Vault.saveGeo(); this.build(); this.update(); this.panel();
     if (m === 'road') { if (navigator.onLine) this.fetchPending(); else toast('Saved. The road route is drawn when you have signal'); }
   },
+  anyNeeds() { for (let i = 1; i < this.pts.length; i++) if (this.needs(i)) return true; return false; },
   async fetchPending() {
-    if (this.fbusy || !navigator.onLine) return; this.fbusy = true;
+    if (this.fbusy || !navigator.onLine) return; this.fbusy = true; let stop = false;
     try {
-      for (let i = 1; i < this.pts.length && this.alive; i++) {
-        if (!this.needs(i)) continue;
-        const a = this.pts[i - 1], b = this.pts[i], k = this.lk(i);
-        try {
-          const old = this.rec(i), via = (old && old.via) || [], x = await roadRoute(a.ll, b.ll, via);
-          if (x === 'none') this.lastErr = '';
-          if (x === 'none') Vault.geo[k] = { m: 'road', none: 1, v: 2, a: a.ll, b: b.ll, ...(via.length ? { via } : {}) };
-          else {
-            let c = x.c, tol = .0003; while (c.length > 700 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; }
-            this.lastErr = ''; Vault.geo[k] = { m: 'road', v: 2, km: x.km, a: a.ll, b: b.ll, ...(via.length ? { via } : {}), p: c.flatMap(q => [+q[0].toFixed(4), +q[1].toFixed(4)]) };
-          }
-          await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel();
-        } catch (e) { this.lastErr = String(e && e.message || e).slice(0, 80); toast('Couldn’t get the route: ' + this.lastErr); this.panel(); break; } // no signal or busy: try again next time
-        await new Promise(r => setTimeout(r, 1100));
+      for (let i = 1; i < this.pts.length && this.alive && !stop; i++) {
+        for (let k = 0; this.alive && !stop; k++) {
+          const r = this.leg(i); if (!r || k >= r.parts.length) break; const q = r.parts[k];
+          if (q.m !== 'road' || !(q.redo || (!q.none && !q.p))) continue;
+          const a = k ? r.wp[k - 1] : this.pts[i - 1].ll, b = k < r.wp.length ? r.wp[k] : this.pts[i].ll;
+          try {
+            const x = await roadRoute(a, b, []);
+            if (this.leg(i) !== r || r.parts[k] !== q) continue; // edited while we waited: it is picked up again below
+            this.lastErr = '';
+            if (x === 'none') { q.none = 1; q.redo = 0; this.setP(q, undefined); delete q.km; }
+            else { let c = x.c, tol = .0003; while (c.length > 700 && tol < 1) { c = simplify(x.c, tol); tol *= 1.7; } q.none = 0; q.redo = 0; q.km = x.km; this.setP(q, c.flatMap(z => [+z[0].toFixed(4), +z[1].toFixed(4)])); }
+            await Vault.saveGeo(); if (!this.alive) break; this.build(); this.update(); this.panel(); REdit.live();
+          } catch (e) { this.lastErr = String(e && e.message || e).slice(0, 80); toast('Couldn’t get the route: ' + this.lastErr); this.panel(); stop = true; break; } // no signal or busy: try again next time
+          await new Promise(r => setTimeout(r, 1100));
+        }
       }
     } finally { this.fbusy = false; }
+    if (!stop && this.alive && this.anyNeeds()) setTimeout(() => this.fetchPending(), 200);
   },
   go(i, fly = true) {
     if (!this.pts.length) return; this.auto = false; this.idx = Math.max(0, Math.min(this.pts.length - 1, i));
@@ -1978,7 +2052,7 @@ const MapV = {
     const c = $('#mapcard'); if (!c) return;
     const P = this.pts, A = this.all, miss = this.missing();
     const ccs = new Set(A.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
-    let km = 0; for (let i = 1; i < P.length; i++) { const r = this.rec(i); km += r && r.m === 'road' && this.geom(i) ? r.km : hav(P[i - 1].ll, P[i].ll); }
+    let km = 0; for (let i = 1; i < P.length; i++) km += this.legKm(i);
     const stats = `<div class="mstats"><div><b>${A.length}</b><span>stop${A.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km, roughly</span></div></div>`;
     if (!P.length) { c.innerHTML = `${stats}<p class="hint" style="margin:10px 0 0">${A.length ? 'None of your places are on the map yet. Tap “Place them” above to find or drop them.' : 'Add a place to a day in a chapter and it shows up here.'}</p>`; this.note(miss); return; }
     const p = P[this.idx];
@@ -2034,7 +2108,6 @@ const MapV = {
   },
   async dropPin(p) {
     const v = this.vb, k = v.w / this.W, [la, lo] = unproj(v.x + p[0] * k, v.y + p[1] * k), key = this.placing, vi = this.via; this.placing = ''; this.via = 0;
-    if (vi) { const r = this.rec(vi); if (r && r.m === 'road') { r.via = [...(r.via || []), [+la.toFixed(4), +lo.toFixed(4)]]; r.redo = 1; await Vault.saveGeo(); this.note(this.missing()); this.panel(); this.fetchPending(); } return; }
     Vault.geo ||= {}; Vault.geo[key] = [+la.toFixed(4), +lo.toFixed(4), 'manual']; await Vault.saveGeo(); this.refresh(key);
   },
   refresh(selKey) {
@@ -2058,9 +2131,148 @@ const MapV = {
     this.busy = false; if (this.alive) { toast(found ? `Found ${found} of ${list.length}` : 'Could not find those places. Drop a pin by hand instead.'); this.panel(); }
   }
 };
+// ----- the route editor: a pop-up map for one leg -----
+const REdit = {
+  open: false, i: 0, sel: 0, selWp: -1, vb: null, W: 0, H: 0, ptr: new Map(), drag: null, dirty: false, note: '',
+  async show(i) {
+    const M = MapV; if (i < 1 || !M.pts[i]) return;
+    M.ensure(i); this.i = i; this.sel = 0; this.selWp = -1; this.note = ''; this.dirty = false; this.open = true;
+    if (!M.world) { try { await M.loadWorld(); } catch {} }
+    const a = M.pts[i - 1], b = M.pts[i], o = $('#redit');
+    o.innerHTML = `<header class="top c"><div class="row"><button class="cbtn" data-act="re-close" aria-label="Close">${ico('x', 18, '#2E2823', 2.2)}</button><div class="tt"><div class="eyebrow">Edit route</div><h1>${esc(a.place)} → ${esc(b.place)}</h1></div><button class="cbtn" data-act="re-close" aria-label="Done">${ico('check', 20, '#33502A', 2.6)}</button></div></header>
+    <div id="rebox"><svg id="resvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="reland">${M.world ? M.landHTML(M.world) : ''}</g><path id="rehl" class="rehl" fill="none"/><path id="rert" class="rt1" fill="none"/><path id="rerf" class="rf1" fill="none"/><path id="rers" class="rs1" fill="none"/><path id="reln" class="reln" fill="none"/></svg><div id="redots"></div>
+    <div class="mapctl"><button class="cbtn" data-act="re-in" aria-label="Zoom in">${ico('plus', 18)}</button><button class="cbtn" data-act="re-out" aria-label="Zoom out">${ico('minus', 18)}</button><button class="cbtn" data-act="re-fit" aria-label="Show the whole leg">${ico('fit', 18)}</button></div></div>
+    <div class="rebar" id="rebar"></div>`;
+    o.classList.add('on'); this.bar(); const box = $('#rebox'); this.W = box.clientWidth; this.H = box.clientHeight;
+    for (let k = 0; k < 8 && (this.W < 100 || this.H < 150); k++) { await new Promise(r => requestAnimationFrame(r)); this.W = box.clientWidth; this.H = box.clientHeight; }
+    this.bind(box); this.fit(); this.dots(); this.draw();
+    this.ro?.disconnect(); this.ro = new ResizeObserver(() => { // the panel below changes height as you edit, so the map's height changes too
+      const w = box.clientWidth, h = box.clientHeight; if (!w || !h || !this.vb || (w === this.W && h === this.H)) return;
+      const v = this.vb, cx = v.x + v.w / 2, cy = v.y + v.h / 2; this.W = w; this.H = h; this.vb = { x: cx - v.w / 2, y: cy - v.w * h / w / 2, w: v.w, h: v.w * h / w }; this.draw();
+    }); this.ro.observe(box);
+  },
+  close() { if (!this.open) return; this.open = false; this.ro?.disconnect(); const o = $('#redit'); o.classList.remove('on'); o.innerHTML = ''; this.ptr.clear(); if (MapV.alive) { MapV.build(); MapV.update(); MapV.panel(); } },
+  R() { return MapV.leg(this.i); },
+  A() { return MapV.anchors(this.i); },
+  fit() {
+    const A = this.A(), r = this.R(), pts = [...A]; r.parts.forEach((q, k) => { if (q.h && q.m !== 'road') pts.push(...partCtl(A, k, q)); });
+    const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const w = Math.max((x1 - x0) * 1.7, (y1 - y0) * 1.7 * this.W / this.H, .6 * PS);
+    this.vb = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - w * this.H / this.W / 2, w, h: w * this.H / this.W };
+  },
+  live() { if (this.open) { this.bar(); this.draw(); } },
+  bar() {
+    const el = $('#rebar'); if (!el) return; const r = this.R(), q = r.parts[this.sel], n = r.parts.length, curve = q.m !== 'road';
+    const chips = r.parts.map((p, k) => `<button class="rchip${k === this.sel ? ' on' : ''}" data-act="re-part" data-k="${k}">${n > 1 ? (k + 1) + '. ' : ''}${MODES[p.m].join(' ')}</button>`).join('');
+    const mode = m => `<button data-act="re-mode" data-m="${m}" class="${q.m === m ? 'on' : ''}">${MODES[m].join(' ')}</button>`;
+    let hint = this.note;
+    if (!hint) hint = curve ? 'Drag the two white dots to bend this part.' : q.none ? 'No road found for this part, so it stays a straight line.' : q.p && !q.redo ? 'Following the main roads. Drag a numbered point to steer the road through it.' : navigator.onLine ? (MapV.lastErr ? 'Couldn’t get the road yet. It will try again.' : 'Finding the road route…') : 'The road is drawn when you next have signal.';
+    el.innerHTML = `${n > 1 ? `<div class="rechips">${chips}</div>` : ''}<div class="mseg">${mode('fly')}${mode('road')}${mode('sail')}</div>
+      <p class="rh">${hint}</p>
+      <div class="btns"><button class="btn small" data-act="re-add">＋ Add a point</button><button class="btn small" data-act="re-rm"${this.selWp < 0 ? ' disabled' : ''}>Remove point</button>${curve && q.h ? '<button class="btn small" data-act="re-straight">Straighten</button>' : ''}</div>
+      ${n === 1 ? '<p class="rh" style="margin-top:8px">Changed how you travelled halfway? Add a point where you switched, then pick the part after it and choose its mode.</p>' : ''}`;
+  },
+  dots() {
+    const el = $('#redots'); if (!el) return; const M = MapV, r = this.R(), q = r.parts[this.sel], a = M.pts[this.i - 1], b = M.pts[this.i];
+    el.innerHTML = `<div class="ep" data-e="0"><i></i><span>${esc(a.place)}</span></div><div class="ep" data-e="1"><i></i><span>${esc(b.place)}</span></div>`
+      + r.wp.map((_, j) => `<button class="hd wp${j === this.selWp ? ' sel' : ''}" data-t="wp" data-j="${j}" aria-label="Point ${j + 1}"><i>${j + 1}</i></button>`).join('')
+      + (q.m !== 'road' ? [0, 1].map(w => `<button class="hd ch" data-t="h" data-w="${w}" aria-label="Bend handle ${w + 1}"><i></i></button>`).join('') : '');
+  },
+  draw() {
+    const svg = $('#resvg'); if (!svg || !this.vb) return; const v = this.vb, k = this.W / v.w, M = MapV, r = this.R(), A = this.A(), q = r.parts[this.sel];
+    svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+    let road = '', str = '', sail = '', hl = '';
+    r.parts.forEach((_, j) => { const { d, kind } = M.partD(r, A, j); if (kind === 'road') road += d; else if (kind === 'sail') sail += d; else str += d; if (j === this.sel) hl = d; });
+    const set = (id, d) => { const e = $(id); if (e) e.setAttribute('d', d); };
+    set('#rehl', r.parts.length > 1 ? hl : ''); set('#rert', road); set('#rerf', str); set('#rers', sail);
+    const ctl = q.m !== 'road' ? partCtl(A, this.sel, q) : null, f = z => z[0].toFixed(1) + ' ' + z[1].toFixed(1);
+    set('#reln', ctl ? `M${f(A[this.sel])}L${f(ctl[0])}M${f(A[this.sel + 1])}L${f(ctl[1])}` : '');
+    const place = (el, pt, off) => { el.style.transform = `translate(${((pt[0] - v.x) * k - off).toFixed(1)}px,${((pt[1] - v.y) * k - off).toFixed(1)}px)`; };
+    $$('#redots .ep').forEach(el => place(el, A[+el.dataset.e ? A.length - 1 : 0], 0));
+    $$('#redots .hd').forEach(el => { const pt = el.dataset.t === 'wp' ? A[+el.dataset.j + 1] : ctl && ctl[+el.dataset.w]; if (pt) place(el, pt, 22); });
+  },
+  async save(fetch) {
+    await Vault.saveGeo(); MapV.build(); MapV.update(); MapV.panel(); this.bar(); this.dots(); this.draw();
+    if (fetch) { if (navigator.onLine) MapV.fetchPending(); else { this.note = 'Saved. The road is drawn when you next have signal.'; this.bar(); } }
+  },
+  async mode(m) {
+    const r = this.R(), q = r.parts[this.sel]; this.note = '';
+    r.parts[this.sel] = MapV.mk(m, q); await this.save(m === 'road');
+  },
+  async add() {
+    const M = MapV, r = this.R(), k = this.sel, q = r.parts[k], A = this.A(), p = A[k], n = A[k + 1]; let mid, L, Rt;
+    const pts = []; if (q.m === 'road' && q.p) for (let j = 0; j + 1 < q.p.length; j += 2) pts.push([q.p[j], q.p[j + 1]]);
+    if (pts.length >= 3) { // split the real road at about half way, so nothing has to be fetched again
+      const seg = pts.slice(1).map((z, j) => hav(pts[j], z)), tot = seg.reduce((x, y) => x + y, 0); let acc = 0, j = 0; while (j < seg.length - 1 && acc + seg[j] < tot / 2) acc += seg[j++];
+      const m = Math.max(1, Math.min(pts.length - 2, j + 1)), left = seg.slice(0, m).reduce((x, y) => x + y, 0), fl = z => z.flatMap(c => c);
+      mid = pts[m]; L = { m: 'road', km: Math.round((q.km || 0) * left / (tot || 1)) }; Rt = { m: 'road', km: Math.max(0, (q.km || 0) - L.km) }; M.setP(L, fl(pts.slice(0, m + 1))); M.setP(Rt, fl(pts.slice(m)));
+    } else if (q.h && q.m !== 'road') { // split the curve in two without changing its shape
+      const c = partCtl(A, k, q), mi = (u, w) => [(u[0] + w[0]) / 2, (u[1] + w[1]) / 2], Q0 = mi(p, c[0]), Q1 = mi(c[0], c[1]), Q2 = mi(c[1], n), R0 = mi(Q0, Q1), R1 = mi(Q1, Q2), S = mi(R0, R1);
+      mid = ll4(S); L = { m: q.m, h: [...ll4(Q0), ...ll4(R0)] }; Rt = { m: q.m, h: [...ll4(R1), ...ll4(Q2)] };
+    } else { mid = ll4([(p[0] + n[0]) / 2, (p[1] + n[1]) / 2]); L = { ...q }; Rt = { ...q }; delete L.h; delete Rt.h; if (q.m === 'road') { delete L.p; delete Rt.p; delete L.km; delete Rt.km; } }
+    r.wp.splice(k, 0, mid); r.parts.splice(k, 1, L, Rt); this.selWp = k; this.sel = k + 1;
+    this.note = 'Point added. Drag it into place. The buttons now change the part after it.';
+    await this.save(q.m === 'road' && !pts.length);
+  },
+  async remove() {
+    const j = this.selWp; if (j < 0) return; const r = this.R(), L = r.parts[j], Rt = r.parts[j + 1]; let m;
+    if (L.m === 'road' && Rt.m === 'road') m = { m: 'road', redo: 1 };
+    else m = { m: L.m, ...(L.m !== 'road' && L.h && Rt.h && Rt.m === L.m ? { h: [L.h[0], L.h[1], Rt.h[2], Rt.h[3]] } : {}) };
+    r.wp.splice(j, 1); r.parts.splice(j, 2, m); this.sel = j; this.selWp = -1; this.note = '';
+    await this.save(m.m === 'road');
+  },
+  bind(box) {
+    const pos = ev => { const b = box.getBoundingClientRect(); return [ev.clientX - b.left, ev.clientY - b.top]; };
+    const world = pp => [this.vb.x + pp[0] * this.vb.w / this.W, this.vb.y + pp[1] * this.vb.w / this.W];
+    box.onpointerdown = ev => {
+      if (ev.target.closest('.mapctl')) return;
+      box.setPointerCapture(ev.pointerId); this.ptr.set(ev.pointerId, pos(ev));
+      const hd = ev.target.closest('.hd');
+      if (hd && this.ptr.size === 1) this.drag = { kind: hd.dataset.t, j: +hd.dataset.j, w: +hd.dataset.w, moved: 0 };
+      else this.drag = { kind: 'pan', moved: 0 };
+    };
+    box.onpointermove = ev => {
+      if (!this.ptr.has(ev.pointerId) || !this.drag) return; const old = this.ptr.get(ev.pointerId), now = pos(ev); this.ptr.set(ev.pointerId, now);
+      this.drag.moved += Math.abs(now[0] - old[0]) + Math.abs(now[1] - old[1]);
+      if (this.ptr.size === 2) { // pinch
+        const o = [...this.ptr.entries()].map(([id, p]) => id === ev.pointerId ? old : p), n = [...this.ptr.values()];
+        const d0 = Math.hypot(o[0][0] - o[1][0], o[0][1] - o[1][1]) || 1, d1 = Math.hypot(n[0][0] - n[1][0], n[0][1] - n[1][1]);
+        this.drag = { kind: 'pan', moved: 99 }; this.zoom(d1 / d0, (n[0][0] + n[1][0]) / 2, (n[0][1] + n[1][1]) / 2); return;
+      }
+      if (this.drag.kind === 'pan') { const k = this.vb.w / this.W; this.vb.x -= (now[0] - old[0]) * k; this.vb.y -= (now[1] - old[1]) * k; this.draw(); }
+      else if (this.drag.moved > 4) this.move(world(now));
+    };
+    const up = async ev => {
+      if (!this.ptr.has(ev.pointerId)) return; this.ptr.delete(ev.pointerId); const d = this.drag; if (this.ptr.size) return; this.drag = null; if (!d) return;
+      if (d.kind === 'pan') { if (d.moved < 6 && this.selWp >= 0) { this.selWp = -1; this.dots(); this.bar(); this.draw(); } return; }
+      if (d.moved < 6) { if (d.kind === 'wp') { this.selWp = this.selWp === d.j ? -1 : d.j; this.dots(); this.bar(); this.draw(); } return; }
+      const fetch = this.dirty; this.dirty = false; this.note = fetch && !navigator.onLine ? 'Saved. The road is drawn when you next have signal.' : ''; await this.save(fetch);
+    };
+    box.onpointerup = up; box.onpointercancel = up;
+    box.onwheel = ev => { ev.preventDefault(); const p = pos(ev); this.zoom(ev.deltaY < 0 ? 1.25 : .8, p[0], p[1]); };
+  },
+  move(X) { // a dot is being dragged
+    const r = this.R(), d = this.drag;
+    if (d.kind === 'h') {
+      const q = r.parts[this.sel]; if (!q.h) { const c = partCtl(this.A(), this.sel, q); q.h = [...ll4(c[0]), ...ll4(c[1])]; }
+      const n = ll4(X); q.h[d.w * 2] = n[0]; q.h[d.w * 2 + 1] = n[1];
+    } else {
+      const j = d.j, old = proj(r.wp[j]), dx = X[0] - old[0], dy = X[1] - old[1]; r.wp[j] = ll4(X); this.selWp = j;
+      const A = this.A(), shift = (q, o) => { if (!q.h) return; const c = proj([q.h[o], q.h[o + 1]]), n = ll4([c[0] + dx, c[1] + dy]); q.h[o] = n[0]; q.h[o + 1] = n[1]; };
+      const left = r.parts[j], right = r.parts[j + 1];
+      for (const q of [left, right]) if (q.m === 'road') { delete q.km; MapV.setP(q, undefined); q.none = 0; q.redo = 1; this.dirty = true; }
+      shift(left, 2); shift(right, 0);
+    }
+    this.draw();
+  },
+  zoom(f, sx, sy) {
+    sx ??= this.W / 2; sy ??= this.H / 2; const v = this.vb, w = Math.max(.15 * PS, Math.min(250 * PS, v.w / f)), k = w / this.W, ax = v.x + sx / this.W * v.w, ay = v.y + sy / this.H * v.h;
+    this.vb = { x: ax - sx * k, y: ay - sy * k, w, h: w * this.H / this.W }; this.draw();
+  }
+};
 const mapHTML = () => `<div class="mapscreen">
   <header class="top c"><div class="row"><button class="cbtn" data-act="map-back" aria-label="Back">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Latin America</div><h1>Trip map</h1></div><div style="width:42px"></div></div></header>
-  <div id="mapbox"><svg id="mapsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="land"></g><path id="rt0" class="rt0" fill="none"/><path id="rt1" class="rt1" fill="none"/><path id="rf1" class="rf1" fill="none"/></svg><div id="mappins"></div><div id="mapnote"></div>
+  <div id="mapbox"><svg id="mapsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="land"></g><path id="rt0" class="rt0" fill="none"/><path id="rt1" class="rt1" fill="none"/><path id="rf1" class="rf1" fill="none"/><path id="rs1" class="rs1" fill="none"/></svg><div id="mappins"></div><div id="mapnote"></div>
     <div class="mapctl"><button class="cbtn" data-act="map-in" aria-label="Zoom in">${ico('plus', 18)}</button><button class="cbtn" data-act="map-out" aria-label="Zoom out">${ico('minus', 18)}</button><button class="cbtn" data-act="map-fit" aria-label="Show everything">${ico('fit', 18)}</button></div></div>
   <div class="mapcard" id="mapcard"></div></div>`;
 
@@ -2098,14 +2310,22 @@ document.addEventListener('click', async ev => {
     case 'goto': { const d = parse(t.dataset.m); S.month = new Date(d.getFullYear(), d.getMonth(), 1); render(); break; }
     case 'tab': S.tab = t.dataset.tab; rerender(); break;
     case 'map': flush(); S.mapFrom = S.view === 'entry' ? S.openId : ''; S.mapFocus = S.mapFrom; S.mapBack = S.view; S.view = 'map'; render(); scrollTo(0, 0); break;
-    case 'map-back': { MapV.destroy(); S.mapFocus = ''; if (S.mapFrom && S.entries.some(x => x.id === S.mapFrom)) { S.view = 'entry'; S.openId = S.mapFrom; } else { S.view = S.mapBack && S.mapBack !== 'entry' ? S.mapBack : 'cal'; S.openId = null; } render(); scrollTo(0, 0); break; }
+    case 'map-back': { REdit.close(); MapV.destroy(); S.mapFocus = ''; if (S.mapFrom && S.entries.some(x => x.id === S.mapFrom)) { S.view = 'entry'; S.openId = S.mapFrom; } else { S.view = S.mapBack && S.mapBack !== 'entry' ? S.mapBack : 'cal'; S.openId = null; } render(); scrollTo(0, 0); break; }
     case 'map-in': MapV.zoom(1.6); break;
     case 'map-out': MapV.zoom(1 / 1.6); break;
     case 'map-fit': MapV.fit(true); break;
     case 'map-play': MapV.play(); break;
     case 'leg': MapV.setLeg(t.dataset.m); break;
-    case 'leg-via': MapV.via = MapV.idx; MapV.note(MapV.missing()); toast('Tap the map on the road to pass through'); break;
-    case 'leg-via-clear': { const r = MapV.rec(MapV.idx); if (r) { delete r.via; r.redo = 1; await Vault.saveGeo(); MapV.panel(); MapV.fetchPending(); } break; }
+    case 're-open': REdit.show(MapV.idx); break;
+    case 're-close': REdit.close(); break;
+    case 're-in': REdit.zoom(1.6); break;
+    case 're-out': REdit.zoom(1 / 1.6); break;
+    case 're-fit': REdit.fit(); REdit.draw(); break;
+    case 're-part': REdit.sel = +t.dataset.k; REdit.selWp = -1; REdit.note = ''; REdit.bar(); REdit.dots(); REdit.draw(); break;
+    case 're-mode': REdit.mode(t.dataset.m); break;
+    case 're-add': REdit.add(); break;
+    case 're-rm': REdit.remove(); break;
+    case 're-straight': { const q = REdit.R().parts[REdit.sel]; delete q.h; REdit.note = ''; REdit.save(false); break; }
     case 'map-open': { MapV.destroy(); S.mapFrom = ''; S.mapFocus = ''; openEntry(t.dataset.id); break; }
     case 'map-move': { const p = MapV.pts[MapV.idx]; if (p) { MapV.placing = p.key; MapV.note(MapV.missing()); toast('Tap the map where it really is'); } break; }
     case 'map-cancel': MapV.placing = ''; MapV.via = 0; MapV.note(MapV.missing()); break;
@@ -2307,7 +2527,7 @@ const Lock = {
     urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
     S.entries = []; S.photos = []; S.audio = []; S.select = null; Stt.busy.clear();
     Vault.key = null; Vault.rec = null; Vault.apiKey = ''; Vault.stt = null; Vault.geo = null; Vault.usage = null; MapV.destroy();
-    $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = ''; $('#recov').classList.remove('on'); $('#recov').innerHTML = '';
+    $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = ''; $('#recov').classList.remove('on'); $('#recov').innerHTML = ''; REdit.open = false; $('#redit').classList.remove('on'); $('#redit').innerHTML = '';
     this.setMode('unlock');
     if (S.update && !Vault.needKey) setTimeout(() => location.reload(), 400); // a new version is waiting: load it now, the app is locked anyway
   },
