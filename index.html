@@ -239,6 +239,31 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .rs1{stroke:#2F7F86;stroke-width:4;stroke-dasharray:.5 7;stroke-linecap:round;vector-effect:non-scaling-stroke}
 .rehl{stroke:#F1C7AA;stroke-opacity:.85;stroke-width:13;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
 .reln{stroke:#B5562F;stroke-opacity:.55;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.hside{width:84px;display:flex;flex:none}.hside.r{justify-content:flex-end}
+.g3btn{height:42px;padding:0 15px 0 12px;border:0;border-radius:21px;background:var(--accent);color:#fff;font-weight:800;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 4px 12px rgba(181,86,47,.3)}
+.g3pill{height:42px;padding:0 15px 0 12px;border-radius:21px;border:1px solid #E3D5BA;background:var(--card);color:var(--ink);font-weight:700;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+#g3{position:fixed;inset:0;z-index:70;background:var(--paper);display:none;flex-direction:column}
+#g3.on{display:flex}
+#g3 .top{position:relative;flex:none}
+#g3box{flex:1;min-height:0;position:relative;overflow:hidden;background:linear-gradient(#EFE7D3,#F6F0E4 55%);touch-action:none;user-select:none;-webkit-user-select:none}
+#g3cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#g3pins{position:absolute;inset:0;pointer-events:none;overflow:hidden}#g3pins .mp{pointer-events:auto}#g3 .mp i{inset:3px;line-height:19px;font-size:11px;border-width:2px}#g3 .mp .ml{left:27px}
+#g3chip{position:absolute;left:14px;top:12px;display:flex;align-items:baseline;gap:8px;max-width:calc(100% - 28px);background:rgba(255,253,248,.94);border-radius:18px;padding:8px 14px;box-shadow:0 3px 12px rgba(80,50,20,.16);font-weight:700;font-size:13px;pointer-events:none}
+#g3chip:empty{display:none}#g3chip small{color:var(--muted);font-weight:600;font-size:12px;white-space:nowrap}
+#g3load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-weight:600;font-size:14px}
+.g3card{background:var(--card);border-radius:28px 28px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);box-shadow:0 -6px 24px rgba(120,90,50,.14);margin-top:-22px;position:relative;z-index:6;flex:none}
+.g3hd{display:flex;align-items:center;gap:10px}.g3hd b{display:block;font:600 18px/1.2 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.g3hd small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.g3sp{height:42px;min-width:52px;border-radius:21px;border:1.5px solid #E6D9C3;background:#FFFDF8;font-weight:800;font-size:13.5px;color:var(--ink);cursor:pointer;padding:0 12px}
+.g3play{background:var(--accent);border-color:var(--accent);color:#fff}
+.g3steps{display:flex;align-items:flex-start;overflow-x:auto;margin:12px -16px 12px;padding:2px 16px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.g3steps::-webkit-scrollbar{display:none}
+.g3s{flex:none;width:64px;border:0;background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;color:var(--ink)}
+.g3s i{width:28px;height:28px;border-radius:50%;box-sizing:border-box;border:2px solid #E7C9B6;background:#fff;color:var(--accent);font:800 12px/24px var(--serif,inherit);font-style:normal;text-align:center}
+.g3s.on i{background:var(--accent);border-color:var(--accent);color:#fff}.g3s.cur i{box-shadow:0 0 0 5px rgba(181,86,47,.22)}
+.g3s span{font-size:11px;font-weight:600;line-height:1.15;max-width:62px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5C5043}
+.g3c{flex:none;width:34px;height:28px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;position:relative;color:#9A8C7A}
+.g3c::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;margin-top:-1.5px;background:#E9DDC8;border-radius:2px;z-index:0}
+.g3c.on::before{background:var(--accent)}.g3c.cur::before{background:linear-gradient(90deg,var(--accent),#E9DDC8)}
+.g3c{z-index:0}.g3c{background:none}
 #redit{position:fixed;inset:0;z-index:75;background:var(--paper);display:none;flex-direction:column}
 #redit.on{display:flex}
 #redit .top{position:relative;flex:none}
@@ -354,12 +379,13 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 <button class="btn ghost small" id="lockUpdBtn" data-act="lock-update">Check for updates</button><p class="hint" id="lockUpd" style="margin:2px 0 0;text-align:center"></p></div>
 <div id="recov" aria-live="polite"></div>
 <div id="redit"></div>
+<div id="g3"></div>
 <div id="toast"></div>
 <script>
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.2'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.3'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -719,6 +745,7 @@ const IC = {
   off: '<path d="M3 3l18 18M9.5 5.2A7 7 0 0 1 19 11.5a4.5 4.5 0 0 1 1.7 7M6.5 19A4.5 4.5 0 0 1 5 10.4"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   map: '<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.2 3 3.2 15 0 18M12 3c-3.2 3-3.2 15 0 18"/>', flat: '<path d="M3 6.5l6-2 6 2 6-2v13l-6 2-6-2-6 2z"/><path d="M9 4.5v13M15 6.5v13"/>',
   play: '<path d="M8 5.5v13l11-6.5z"/>', pause: '<path d="M9 5.5v13M15 5.5v13"/>', minus: '<path d="M5 12h14"/>',
   fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'
 };
@@ -1859,8 +1886,9 @@ const MapV = {
     for (const g of t.objects.countries.geometries) {
       if (g.properties.name === 'Antarctica') continue;
       const polys = g.type === 'Polygon' ? [g.arcs] : g.arcs; let d = '';
-      for (const poly of polys) for (const r of poly) d += dOf(ring(r));
-      out.push({ name: g.properties.name, cc: ccOf(g.properties.name), d });
+      const pl = polys.map(poly => poly.map(r => ring(r)));
+      for (const poly of pl) for (const r of poly) d += dOf(r);
+      out.push({ name: g.properties.name, cc: ccOf(g.properties.name), d, polys: pl });
     }
     return (this.world = out);
   },
@@ -2270,8 +2298,333 @@ const REdit = {
     this.vb = { x: ax - sx * k, y: ay - sy * k, w, h: w * this.H / this.W }; this.draw();
   }
 };
+// ---------- 3D globe: the trip travelled leg by leg by a plane, car or boat ----------
+// three.js is loaded only when the 3D button is pressed (it is kept on the phone, so this works offline too).
+const G3 = {
+  on: false, raf: 0, t: 0, playing: true, speed: 1, mode: 'follow', free: false, legs: [], total: 0, DW: .7, LEAD: .5,
+  ptr: new Map(), sig: '', last: 0,
+  d2r: Math.PI / 180,
+  v3(la, lo, r = 1) { const p = (90 - la) * this.d2r, t = (lo + 180) * this.d2r; return new THREE.Vector3(-r * Math.sin(p) * Math.cos(t), r * Math.cos(p), r * Math.sin(p) * Math.sin(t)); },
+  ll(v) { const r = v.length() || 1; return [Math.asin(Math.max(-1, Math.min(1, v.y / r))) / this.d2r, Math.atan2(v.z, -v.x) / this.d2r - 180]; },
+  async three() {
+    if (window.THREE) return;
+    await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'vendor/three.min.js'; s.onload = res; s.onerror = () => rej(new Error('The 3D engine is not on this phone yet. Open the app once with signal')); document.head.appendChild(s); });
+  },
+  shell() {
+    return `<header class="top c"><div class="row"><div class="hside"><button class="cbtn" data-act="g3-close" aria-label="Back to the map">${ico('back', 20)}</button></div><div class="tt"><div class="eyebrow">Latin America</div><h1>Trip in 3D</h1></div><div class="hside r"><button class="g3pill" data-act="g3-close" aria-label="Back to the flat map">${ico('flat', 18, 'var(--accent)', 1.9)}Flat</button></div></div></header>
+    <div id="g3box"><canvas id="g3cv"></canvas><div id="g3pins"></div><div id="g3chip"></div><div id="g3load">Drawing the globe…</div></div>
+    <div class="g3card" id="g3card"></div>`;
+  },
+  // ----- the route as points on the globe -----
+  gc(p, q) {
+    const A = this.v3(p[0], p[1]), B = this.v3(q[0], q[1]), om = A.angleTo(B), n = Math.max(6, Math.min(160, Math.ceil(om / .004))), s = Math.sin(om), out = [];
+    for (let k = 0; k <= n; k++) { const t = k / n, w1 = s > 1e-9 ? Math.sin((1 - t) * om) / s : 1 - t, w2 = s > 1e-9 ? Math.sin(t * om) / s : t; out.push(this.ll(A.clone().multiplyScalar(w1).add(B.clone().multiplyScalar(w2)))); }
+    return out;
+  },
+  sample(i) {
+    const M = MapV, a = M.pts[i - 1], b = M.pts[i], r = M.leg(i);
+    if (!r) return [{ m: 'fly', pts: this.gc(a.ll, b.ll) }];
+    const A = M.anchors(i), L = [a.ll, ...r.wp, b.ll];
+    return r.parts.map((q, k) => {
+      let pts; const g = q.m === 'road' ? M.partGeom(r, k) : null;
+      if (g) pts = [A[k], ...g, A[k + 1]].map(z => unproj(z[0], z[1]));
+      else if (q.h && q.m !== 'road') {
+        const c = partCtl(A, k, q); pts = [];
+        for (let s = 0; s <= 40; s++) { const t = s / 40, u = 1 - t, f = j => u * u * u * A[k][j] + 3 * u * u * t * c[0][j] + 3 * u * t * t * c[1][j] + t * t * t * A[k + 1][j]; pts.push(unproj(f(0), f(1))); }
+      } else pts = this.gc(L[k], L[k + 1]);
+      return { m: q.m, pts };
+    });
+  },
+  RAD: { road: 1.0016, sail: 1.0012, fly: 1.0016 },
+  // one part of a leg: unit vectors, distance along it, and how high above the ground it is at each fraction
+  mkPart(m, pts) {
+    const U = []; for (const p of pts) { const u = this.v3(p[0], p[1]); if (!U.length || u.distanceTo(U[U.length - 1]) > 1e-6) U.push(u); }
+    if (U.length < 2) U.push(U[0].clone().add(new THREE.Vector3(1e-5, 0, 0)).normalize());
+    const cum = [0]; for (let k = 1; k < U.length; k++) cum.push(cum[k - 1] + U[k].angleTo(U[k - 1]));
+    const len = cum[cum.length - 1] || 1e-6, H = m === 'fly' ? Math.min(.05, .01 + .35 * len) : 0;
+    return { m, U, cum, len, H };
+  },
+  alt(P, f) { return P.m === 'fly' ? P.H * Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, f))), .8) : 0; },
+  at(P, f) { // unit vector and radius at a fraction of the part
+    f = Math.max(0, Math.min(1, f)); const s = f * P.len; let lo = 0, hi = P.cum.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (P.cum[mid] <= s) lo = mid; else hi = mid; }
+    const d = P.cum[hi] - P.cum[lo], w = d > 0 ? (s - P.cum[lo]) / d : 0, u = P.U[lo].clone().lerp(P.U[hi], w).normalize();
+    return { u, r: this.RAD[P.m] + this.alt(P, f) };
+  },
+  pos(P, f) { const a = this.at(P, f); return a.u.multiplyScalar(a.r); },
+  build() {
+    const M = MapV, legs = []; let t = this.LEAD;
+    for (let i = 1; i < M.pts.length; i++) {
+      const parts = this.sample(i).map(q => this.mkPart(q.m, q.pts)), len = parts.reduce((n, p) => n + p.len, 0), km = M.legKm(i);
+      const dur = 3 + 2.2 * Math.log(1 + km / 40) + this.DW;
+      let c = 0; parts.forEach(p => { p.f0 = c / len; c += p.len; p.f1 = c / len; });
+      legs.push({ i, parts, len, km, dur, start: t }); t += dur;
+    }
+    this.legs = legs; this.total = t;
+  },
+  // ----- the scene -----
+  // The globe is painted twice: once for the whole world, and once in much finer detail over the area you travelled,
+  // so coastlines stay sharp when you zoom right in.
+  paint(world, W, H, w, ls) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    const X = lo => (lo - w.lo0) / (w.lo1 - w.lo0) * W, Y = la => (w.la1 - la) / (w.la1 - w.la0) * H;
+    const sea = g.createLinearGradient(0, 0, 0, H); sea.addColorStop(0, '#C9DDDB'); sea.addColorStop(.5, '#D9E9E7'); sea.addColorStop(1, '#C9DDDB'); g.fillStyle = sea; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 1.6 * ls; g.beginPath();
+    for (let lo = -180; lo <= 540; lo += 15) { g.moveTo(X(lo), 0); g.lineTo(X(lo), H); }
+    for (let la = -75; la <= 75; la += 15) { g.moveTo(0, Y(la)); g.lineTo(W, Y(la)); }
+    g.stroke(); g.lineJoin = 'round';
+    const M = MapV, vis = new Set(M.all.map(x => x.cc).filter(Boolean)), names = [...new Set(M.all.map(x => x.country).filter(Boolean))];
+    for (const co of world) {
+      const v = co.cc && vis.has(co.cc), p = v ? pal(names.find(n => ccOf(n) === co.cc) || co.name) : null;
+      g.fillStyle = v ? p.bg : '#FBF6EA'; g.strokeStyle = v ? p.bd : '#D2C3A2'; g.lineWidth = (v ? 2.2 : 1.3) * ls;
+      for (const off of [-360, 0, 360]) for (const poly of co.polys) {
+        let a = 1e9, z = -1e9; for (const [lo] of poly[0]) { if (lo < a) a = lo; if (lo > z) z = lo; }
+        if (z + off < w.lo0 - 1 || a + off > w.lo1 + 1) continue;
+        g.beginPath();
+        for (const ring of poly) { ring.forEach(([lo, la], k) => { const x = X(lo + off), y = Y(la); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); }
+        g.fill('evenodd'); g.stroke();
+      }
+    }
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = this.rd.capabilities.getMaxAnisotropy(); return tx;
+  },
+  // the box on the globe (degrees) that holds every stop, with some room round it
+  window() {
+    const P = MapV.pts; let la0 = 90, la1 = -90, lo0 = 540, lo1 = -540; const ref = P[0].ll[1];
+    for (const p of P) { const lo = ref + ((p.ll[1] - ref + 540) % 360) - 180; la0 = Math.min(la0, p.ll[0]); la1 = Math.max(la1, p.ll[0]); lo0 = Math.min(lo0, lo); lo1 = Math.max(lo1, lo); }
+    const sp = Math.max(la1 - la0, lo1 - lo0, 8), pad = Math.max(7, sp * .3), cl = (la0 + la1) / 2, co = (lo0 + lo1) / 2;
+    let hl = Math.max((lo1 - lo0) / 2 + pad, 14), ha = Math.max((la1 - la0) / 2 + pad, 12);
+    hl = Math.min(hl, 90); ha = Math.min(ha, 70);
+    return { lo0: co - hl, lo1: co + hl, la0: Math.max(-80, cl - ha), la1: Math.min(80, cl + ha) };
+  },
+  models() {
+    const T = THREE, mat = (c, o = {}) => new T.MeshLambertMaterial({ color: c, ...o });
+    const cream = mat(0xFFFDF8), terra = mat(0xB5562F), dark = mat(0x2E2823), teal = mat(0x2F7F86), glass = mat(0x4F6C77);
+    const mesh = (geo, m, x = 0, y = 0, z = 0) => { const o = new T.Mesh(geo, m); o.position.set(x, y, z); return o; };
+    // plane: nose along +z
+    const plane = new T.Group(), fus = mesh(new T.CapsuleGeometry(.17, 1.15, 4, 14), cream); fus.rotation.x = Math.PI / 2; plane.add(fus);
+    const tail = mesh(new T.ConeGeometry(.17, .5, 14), terra, 0, .02, -.9); tail.rotation.x = -Math.PI / 2; plane.add(tail);
+    for (const s of [1, -1]) {
+      const w = mesh(new T.BoxGeometry(1.05, .05, .42), terra, s * .62, -.03, -.04); w.rotation.y = s * .4; plane.add(w);
+      const st = mesh(new T.BoxGeometry(.42, .04, .2), terra, s * .22, .04, -.8); st.rotation.y = s * .4; plane.add(st);
+      const en = mesh(new T.CylinderGeometry(.075, .075, .34, 12), dark, s * .45, -.13, .02); en.rotation.x = Math.PI / 2; plane.add(en);
+    }
+    plane.add(mesh(new T.BoxGeometry(.05, .4, .34), terra, 0, .28, -.74));
+    const cock = mesh(new T.SphereGeometry(.1, 12, 10), glass, 0, .12, .5); cock.scale.set(1, .8, 1.5); plane.add(cock);
+    // car: front along +z
+    const car = new T.Group();
+    car.add(mesh(new T.BoxGeometry(.74, .24, 1.5), terra, 0, .02, 0));
+    car.add(mesh(new T.BoxGeometry(.64, .22, .74), glass, 0, .24, -.12));
+    car.add(mesh(new T.BoxGeometry(.68, .04, .8), cream, 0, .37, -.12));
+    for (const sx of [1, -1]) for (const sz of [1, -1]) { const wh = mesh(new T.CylinderGeometry(.18, .18, .16, 18), dark, sx * .39, -.1, sz * .5); wh.rotation.z = Math.PI / 2; car.add(wh); }
+    for (const sx of [1, -1]) car.add(mesh(new T.BoxGeometry(.14, .07, .03), cream, sx * .24, .06, .76));
+    // boat: bow along +z
+    const boat = new T.Group(), sh = new T.Shape();
+    sh.moveTo(0, .95); sh.quadraticCurveTo(.46, .55, .36, -.55); sh.lineTo(.3, -.78); sh.lineTo(-.3, -.78); sh.lineTo(-.36, -.55); sh.quadraticCurveTo(-.46, .55, 0, .95);
+    const hull = mesh(new T.ExtrudeGeometry(sh, { depth: .3, bevelEnabled: false }), teal, 0, .12, 0); hull.rotation.x = Math.PI / 2; boat.add(hull);
+    const deck = mesh(new T.ExtrudeGeometry(sh, { depth: .03, bevelEnabled: false }), cream, 0, .14, 0); deck.rotation.x = Math.PI / 2; deck.scale.set(.84, .9, 1); boat.add(deck);
+    boat.add(mesh(new T.CylinderGeometry(.025, .025, 1.4, 8), dark, 0, .84, .14));
+    const sailG = new T.ShapeGeometry(new T.Shape().moveTo(0, 0).lineTo(0, 1.2).lineTo(.72, .06).lineTo(0, 0)), sail = mesh(sailG, mat(0xFFFDF8, { side: T.DoubleSide }), 0, .2, .12); sail.rotation.y = Math.PI / 2; boat.add(sail);
+    const jibG = new T.ShapeGeometry(new T.Shape().moveTo(0, 0).lineTo(0, 1.0).lineTo(-.5, .06).lineTo(0, 0)), jib = mesh(jibG, mat(0xF3D9C6, { side: T.DoubleSide }), 0, .2, .16); jib.rotation.y = Math.PI / 2; boat.add(jib);
+    return { fly: plane, road: car, sail: boat };
+  },
+  mount(world) {
+    const T = THREE, M = MapV, scene = this.scene = new T.Scene(), box = $('#g3box');
+    const globe = new T.Mesh(new T.SphereGeometry(1, 128, 96), new T.MeshLambertMaterial({ map: this.paint(world, 4096, 2048, { lo0: -180, lo1: 180, la0: -90, la1: 90 }, 1) }));
+    scene.add(globe); this.globe = globe;
+    const w = this.window(), ppd = Math.min(3584 / (w.lo1 - w.lo0), 3584 / (w.la1 - w.la0), 160), pw = Math.round((w.lo1 - w.lo0) * ppd), ph = Math.round((w.la1 - w.la0) * ppd);
+    const patch = new T.Mesh(new T.SphereGeometry(1.0004, 120, 80, (w.lo0 + 180) * this.d2r, (w.lo1 - w.lo0) * this.d2r, (90 - w.la1) * this.d2r, (w.la1 - w.la0) * this.d2r), new T.MeshLambertMaterial({ map: this.paint(world, pw, ph, w, 1.35) }));
+    scene.add(patch);
+    scene.add(new T.Mesh(new T.SphereGeometry(1.07, 64, 48), new T.ShaderMaterial({
+      transparent: true, side: T.BackSide, depthWrite: false,
+      vertexShader: 'varying vec3 vN;void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+      fragmentShader: 'varying vec3 vN;void main(){float i=pow(max(0.,.66-dot(vN,vec3(0.,0.,1.))),2.4);gl_FragColor=vec4(.56,.79,.85,min(1.,i*1.8));}'
+    })));
+    scene.add(new T.AmbientLight(0xffffff, 2.35)); this.sun = new T.DirectionalLight(0xfff4e0, 1.25); scene.add(this.sun);
+    // the route: a solid line that is drawn behind the traveller as it goes (it keeps the same width on screen at any zoom)
+    const grp = new T.Group(); scene.add(grp); this.uS = { value: 1 };
+    const line = (col, r0, op) => {
+      const m = new T.MeshBasicMaterial({ color: col, transparent: op < 1, opacity: op }), P = { value: 0 }; m.userData.P = P;
+      m.onBeforeCompile = sh => {
+        sh.uniforms.uS = this.uS; sh.uniforms.uR = { value: r0 }; sh.uniforms.uP = P;
+        sh.vertexShader = 'uniform float uS;uniform float uR;varying float vU;\n' + sh.vertexShader.replace('#include <begin_vertex>', 'vU = uv.x; vec3 transformed = position + normal * uR * (uS - 1.0);');
+        sh.fragmentShader = 'uniform float uP;varying float vU;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n if (vU > uP) discard;');
+      };
+      return m;
+    };
+    const tube = (pts, rad, mat) => {
+      let q = pts; if (q.length > 400) { const st = Math.ceil(q.length / 400); q = q.filter((_, k) => k % st === 0 || k === q.length - 1); }
+      if (q.length < 2) return; grp.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(q, false, 'centripetal'), Math.min(600, q.length * 2), rad, 8, false), mat));
+    };
+    const COL = { road: 0xB5562F, fly: 0xB5562F, sail: 0x2F7F86 };
+    for (const lg of this.legs) for (const P of lg.parts) {
+      const R = this.RAD[P.m];
+      P.mat = line(COL[P.m], .0006, 1); tube(P.U.map((u, k) => u.clone().multiplyScalar(R + this.alt(P, P.cum[k] / P.len))), .0006, P.mat);
+      if (P.m === 'fly') { P.shd = line(0x5A4632, .0004, .22); tube(P.U.map(u => u.clone().multiplyScalar(1.0008)), .0004, P.shd); }
+    }
+    // stops
+    this.pin = M.pts.map(p => this.v3(p.ll[0], p.ll[1], 1.004));
+    $('#g3pins').innerHTML = M.pts.map((p, i) => `<button class="mp" data-act="g3-stop" data-i="${i}" aria-label="${esc(p.place)}"><i>${i + 1}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
+    // the traveller
+    this.mod = this.models(); this.veh = new T.Group(); for (const k in this.mod) { this.mod[k].visible = false; this.veh.add(this.mod[k]); } scene.add(this.veh);
+    this.shade = new T.Mesh(new T.CircleGeometry(.5, 24), new T.MeshBasicMaterial({ color: 0x2E2823, transparent: true, opacity: .2, depthWrite: false })); scene.add(this.shade);
+    this.vk = ''; this.pop = 1; this.q = new T.Quaternion();
+    // camera
+    const cam = this.cam = new T.PerspectiveCamera(40, 1, .01, 8);
+    this.cur = { lat: M.pts[0].ll[0], lon: M.pts[0].ll[1], dist: 1.9, tilt: 28 }; this.tgt = { ...this.cur };
+    this.overview();
+    this.resize(); this.paintCard(true);
+  },
+  overview() {
+    const M = MapV, P = M.pts; let c = new THREE.Vector3(); P.forEach(p => c.add(this.v3(p.ll[0], p.ll[1]))); if (c.lengthSq() < 1e-6) c = this.v3(P[0].ll[0], P[0].ll[1]); c.normalize();
+    let a = 0; const pushA = u => { a = Math.max(a, c.angleTo(u)); }; P.forEach(p => pushA(this.v3(p.ll[0], p.ll[1]))); this.legs.forEach(l => l.parts.forEach(p => p.U.forEach((u, k) => { if (k % 6 === 0) pushA(u); })));
+    const [la, lo] = this.ll(c); this.ov = { lat: la, lon: lo, dist: 1 + Math.max(.3, Math.min(2.6, .32 + 2.5 * a)), tilt: 8 };
+  },
+  followDist(lg) { return 1 + Math.max(.2, Math.min(.85, .2 + 2.2 * lg.len)); },
+  resize() {
+    const b = $('#g3box'); if (!b || !this.rd) return; const w = b.clientWidth, h = b.clientHeight; if (!w || !h) return;
+    this.W = w; this.H = h; this.rd.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); this.rd.setSize(w, h, false); this.cam.aspect = w / h; this.cam.updateProjectionMatrix();
+  },
+  // ----- time -> where the traveller is -----
+  state(t) {
+    let L = this.legs.length - 1; for (let k = 0; k < this.legs.length; k++) if (t < this.legs[k].start + this.legs[k].dur) { L = k; break; }
+    const lg = this.legs[L], mt = lg.dur - this.DW, x = Math.max(0, Math.min(1, (t - lg.start) / mt)), e = .5 * x + .5 * (1 - Math.cos(Math.PI * x)) / 2;
+    const P = lg.parts.find(p => e <= p.f1 + 1e-9) || lg.parts[lg.parts.length - 1], f = P.f1 > P.f0 ? (e - P.f0) / (P.f1 - P.f0) : 1, d = Math.min(.1, .003 / P.len);
+    const a = this.pos(P, f), b0 = this.pos(P, f - d), b1 = this.pos(P, f + d);
+    return { L, lg, P, f, e, pos: a, fwd: b1.sub(b0), alt: this.alt(P, f) };
+  },
+  place(s, dt) {
+    const T = THREE, P = s.P, k = P.m + s.L + '|' + this.legs[s.L].parts.indexOf(P);
+    if (k !== this.vk) { this.vk = k; this.pop = 0; for (const m in this.mod) this.mod[m].visible = m === P.m; }
+    this.pop = Math.min(1, this.pop + dt * 4);
+    const up = s.pos.clone().normalize(), z = s.fwd.clone().normalize();
+    if (P.m !== 'fly') z.sub(up.clone().multiplyScalar(z.dot(up))).normalize();
+    const x = up.clone().cross(z).normalize(), y = z.clone().cross(x).normalize(), m4 = new T.Matrix4().makeBasis(x, y, z), qt = new T.Quaternion().setFromRotationMatrix(m4);
+    if (this.first) { this.q.copy(qt); this.first = false; } else this.q.slerp(qt, 1 - Math.exp(-dt * 9));
+    this.veh.quaternion.copy(this.q); this.veh.position.copy(s.pos);
+    const len = Math.min(.04, (this.cur.dist - 1) * .09 + .006), sc = len / 1.6 * (.3 + .7 * Math.sin(this.pop * Math.PI / 2));
+    this.veh.scale.setScalar(sc);
+    const g = this.mod[P.m], tt = performance.now() / 1000;
+    if (P.m === 'sail') { g.rotation.z = Math.sin(tt * 1.7) * .07; g.rotation.x = Math.sin(tt * 1.3) * .04; g.position.y = Math.sin(tt * 2.1) * .03; }
+    else if (P.m === 'road') { g.position.y = Math.sin(tt * 14) * .006; g.rotation.set(0, 0, 0); }
+    else { g.rotation.z = Math.sin(tt * .9) * .05; g.position.y = 0; }
+    const u = up.clone(); this.shade.visible = P.m === 'fly'; if (P.m === 'fly') { this.shade.position.copy(u).multiplyScalar(1.0019); this.shade.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), u); this.shade.scale.setScalar(sc * 1.5); this.shade.material.opacity = Math.max(.05, .26 - s.alt * 2.2); }
+  },
+  frame(now) {
+    if (!this.on) return; this.raf = requestAnimationFrame(t => this.frame(t));
+    const dt = Math.min(.05, (now - (this.last || now)) / 1000); this.last = now;
+    if (this.playing && this.legs.length) { this.t += dt * this.speed; if (this.t >= this.total) { this.t = this.total; this.playing = false; this.paintCard(true); } }
+    const s = this.legs.length ? this.state(Math.max(this.LEAD * 0, this.t)) : null;
+    if (s) { this.st = s; this.place(s, dt); }
+    // camera: smooth towards where it should be
+    const c = this.cur, g = this.tgt;
+    if (!this.free) {
+      if (this.mode === 'follow' && s) { const [la, lo] = this.ll(s.pos); g.lat = la; g.lon = lo; g.dist = this.followDist(s.lg); g.tilt = 12; }
+      else if (this.ov) { g.lat = this.ov.lat; g.lon = this.ov.lon; g.dist = this.ov.dist; g.tilt = this.ov.tilt; }
+      const k = 1 - Math.exp(-dt * (this.mode === 'follow' ? 5 : 3.2)); let dl = g.lon - c.lon; dl = ((dl + 540) % 360) - 180;
+      c.lat += (g.lat - c.lat) * k; c.lon += dl * k; c.dist += (g.dist - c.dist) * k; c.tilt += (g.tilt - c.tilt) * k;
+    }
+    c.lon = ((c.lon + 540) % 360) - 180; c.lat = Math.max(-80, Math.min(80, c.lat));
+    const cam = this.cam, tl = Math.max(-85, Math.min(85, c.lat - c.tilt));
+    cam.position.copy(this.v3(tl, c.lon, c.dist)); cam.up.set(0, 1, 0); cam.lookAt(this.v3(c.lat, c.lon, 1)); cam.updateMatrixWorld();
+    this.uS.value = Math.max(.4, Math.min(5, (c.dist - 1) / .3));
+    this.sun.position.copy(cam.position).add(new THREE.Vector3(-.6, .9, .4));
+    this.pins(); this.paintCard(false); this.rd.render(this.scene, cam);
+  },
+  pins() {
+    const els = $$('#g3pins .mp'), M = MapV, W = this.W, H = this.H, cp = this.cam.position, cd = cp.length(), ch = cp.clone().normalize(), rects = [], today = iso(new Date());
+    const L = this.st ? this.st.L : 0, dest = this.legs.length ? L + 1 : 0, reached = i => i === 0 ? this.t >= this.LEAD : this.t >= this.legs[i - 1].start + this.legs[i - 1].dur - this.DW;
+    const order = els.map((_, i) => i).sort((a, b) => (b === dest) - (a === dest) || (b === L) - (a === L) || M.pts[b].days - M.pts[a].days);
+    for (const i of order) {
+      const el = els[i], p = this.pin[i], v = p.clone().project(this.cam), front = p.clone().normalize().dot(ch) > 1 / cd + .015 && v.z < 1;
+      const sx = (v.x * .5 + .5) * W, sy = (-v.y * .5 + .5) * H, out = !front || sx < -28 || sy < -28 || sx > W + 28 || sy > H + 28;
+      el.style.display = out ? 'none' : ''; if (out) continue;
+      el.style.transform = `translate(${sx - 14}px,${sy - 14}px)`;
+      const st = M.pts[i], past = reached(i), cls = 'mp' + (st.start > today ? ' plan' : '') + (i === dest ? ' sel' : past ? ' past' : ' fut');
+      if (el.className.replace(' nolab', '') !== cls) el.className = cls;
+      const w = Math.min(130, st.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
+      const clash = rects.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0) || sx + 16 + w > W + 4;
+      el.classList.toggle('nolab', clash && i !== dest);
+      rects.push(clash && i !== dest ? { x0: sx - 14, x1: sx + 14, y0: sy - 14, y1: sy + 14 } : r);
+    }
+    this.trail();
+  },
+  trail() {
+    const s = this.st; if (!s) return;
+    this.legs.forEach((lg, k) => lg.parts.forEach((P, j) => {
+      let v = k < s.L ? 1 : k > s.L ? 0 : P === s.P ? Math.min(1, s.f + .004) : lg.parts.indexOf(s.P) > j ? 1 : 0;
+      if (P.mat.userData.P.value !== v) { P.mat.userData.P.value = v; if (P.shd) P.shd.userData.P.value = v; }
+    }));
+  },
+  // ----- the card at the bottom -----
+  verb(m) { return m === 'fly' ? ['Flying', 'Flew'] : m === 'road' ? ['Driving', 'Drove'] : ['Sailing', 'Sailed']; },
+  stepsHTML() {
+    const M = MapV; let h = '';
+    M.pts.forEach((p, i) => {
+      h += `<button class="g3s" data-act="g3-stop" data-i="${i}" data-n="${i}"><i>${i + 1}</i><span>${esc(p.place)}</span></button>`;
+      if (i < M.pts.length - 1) { const ms = [...new Set(this.legs[i].parts.map(q => q.m))]; h += `<em class="g3c" data-n="${i}">${ms.map(m => MODES[m][0]).join('')}</em>`; }
+    });
+    return h;
+  },
+  paintCard(force) {
+    const c = $('#g3card'); if (!c) return; const M = MapV, L = this.st ? this.st.L : 0, n = M.pts.length;
+    const reachedN = !this.legs.length ? 0 : this.legs.reduce((k, l, j) => this.t >= l.start + l.dur - this.DW ? j + 1 : k, 0) + (this.t >= this.LEAD ? 0 : 0);
+    const ms = this.st ? this.st.P.m : 'fly', sig = [L, ms, reachedN, this.playing, this.speed, this.mode, this.free, this.t >= this.total].join();
+    if (!force && sig === this.sig) return; const first = !c.firstChild || force && !$('#g3steps'); this.sig = sig;
+    if (!this.legs.length) { c.innerHTML = `<div class="g3hd"><div><b>${esc(M.pts[0].place)}</b><small>Add another place to a chapter and the trip will travel between them.</small></div></div>`; return; }
+    const lg = this.legs[L], a = M.pts[lg.i - 1], b = M.pts[lg.i], done = this.t >= this.total, vv = [...new Set(lg.parts.map(q => q.m))];
+    const km = Math.round(lg.km), kmT = km >= 100 ? Math.round(km / 10) * 10 : km;
+    const what = vv.length > 1 ? 'A mix: ' + lg.parts.map(q => this.verb(q.m)[1]).join(', then ').toLowerCase().replace(/^./, x => x.toUpperCase()) : this.verb(vv[0])[1];
+    const chip = $('#g3chip'); if (chip) chip.innerHTML = `<span>${done ? 'Trip finished' : this.verb(ms)[0] + ' to ' + esc(b.place)}</span><small>${done ? n + ' stops' : 'leg ' + (L + 1) + ' of ' + (n - 1)}</small>`;
+    const old = $('#g3steps'), sl = old ? old.scrollLeft : 0;
+    c.innerHTML = `<div class="g3hd"><div style="min-width:0;flex:1"><b>${esc(a.place)} → ${esc(b.place)}</b><small>${what} · about ${kmT} km</small></div><button class="g3sp" data-act="g3-speed" aria-label="Speed">${this.speed}×</button><button class="cbtn g3play" data-act="g3-play" aria-label="${this.playing ? 'Pause' : done ? 'Play again' : 'Play'}">${done ? ico('fit', 18) : ico(this.playing ? 'pause' : 'play', 20, 'currentColor', 2.2)}</button></div>
+      <div class="g3steps" id="g3steps">${this.stepsHTML()}</div>
+      <div class="mseg g3seg"><button data-act="g3-mode" data-m="follow" class="${this.mode === 'follow' && !this.free ? 'on' : ''}">Follow</button><button data-act="g3-mode" data-m="whole" class="${this.mode === 'whole' && !this.free ? 'on' : ''}">Whole trip</button></div>`;
+    const st = $('#g3steps'); st.scrollLeft = sl;
+    $$('#g3steps [data-n]').forEach(el => { const j = +el.dataset.n, isStop = el.classList.contains('g3s'); el.classList.toggle('on', isStop ? j <= reachedN : j < reachedN); el.classList.toggle('cur', isStop ? j === L + 1 : j === L); });
+    const cur = $(`#g3steps .g3s[data-n="${Math.min(L + 1, n - 1)}"]`); if (cur) st.scrollTo({ left: cur.offsetLeft - st.clientWidth / 2 + cur.offsetWidth / 2, behavior: first ? 'auto' : 'smooth' });
+  },
+  jump(i) { // go to the start of the trip into stop i
+    if (!this.legs.length) return; const lg = this.legs[Math.max(0, Math.min(this.legs.length - 1, i - 1))];
+    this.t = i <= 0 ? 0 : lg.start; this.playing = true; this.free = false; this.first = true; this.sig = ''; this.paintCard(true);
+  },
+  // ----- touch: drag to turn the globe, pinch to zoom -----
+  bind(cv) {
+    const mv = (dx, dy) => { const c = this.cur, k = Math.max(.05, (c.dist - 1)) * .22; this.free = true; c.lon -= dx * k; c.lat += dy * k; this.tgt = { ...c }; };
+    cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); this.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+    cv.addEventListener('pointermove', e => {
+      const p = this.ptr.get(e.pointerId); if (!p) return;
+      if (this.ptr.size === 1) { mv(e.clientX - p.x, e.clientY - p.y); this.sig = ''; }
+      else if (this.ptr.size === 2) { const o = [...this.ptr.entries()].find(([id]) => id !== e.pointerId)[1], d0 = Math.hypot(p.x - o.x, p.y - o.y), d1 = Math.hypot(e.clientX - o.x, e.clientY - o.y); if (d0 > 0) { this.free = true; this.cur.dist = Math.max(1.06, Math.min(4.5, 1 + (this.cur.dist - 1) * d0 / d1)); this.tgt = { ...this.cur }; this.sig = ''; } }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+    const up = e => { this.ptr.delete(e.pointerId); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    cv.addEventListener('wheel', e => { e.preventDefault(); this.free = true; this.cur.dist = Math.max(1.06, Math.min(4.5, 1 + (this.cur.dist - 1) * Math.exp(e.deltaY * .0012))); this.tgt = { ...this.cur }; this.sig = ''; }, { passive: false });
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); this.close(); toast('The 3D view stopped. Open it again'); });
+  },
+  async open() {
+    if (this.on) return; const M = MapV; if (!M.pts.length) { toast('Place a stop on the map first'); return; }
+    const o = $('#g3'); this.on = true; this.t = 0; this.playing = true; this.speed = 1; this.mode = 'follow'; this.free = false; this.sig = ''; this.first = true; this.vk = ''; this.st = null;
+    o.classList.add('on'); o.innerHTML = this.shell();
+    try { await this.three(); } catch (e) { toast(e.message); this.close(); return; }
+    if (!this.on) return;
+    try {
+      this.rd = new THREE.WebGLRenderer({ canvas: $('#g3cv'), antialias: true, alpha: true }); this.rd.setClearColor(0x000000, 0);
+    } catch { toast('This phone can’t draw 3D right now'); this.close(); return; }
+    for (let k = 0; k < 8 && !($('#g3box').clientWidth > 50 && $('#g3box').clientHeight > 50); k++) await new Promise(r => requestAnimationFrame(r));
+    let world; try { world = await M.loadWorld(); } catch { toast('The map data is missing'); this.close(); return; }
+    if (!this.on) return; await new Promise(r => setTimeout(r, 30)); if (!this.on) return;
+    this.build(); this.mount(world); this.bind($('#g3cv')); const ld = $('#g3load'); if (ld) ld.remove();
+    this.ro = new ResizeObserver(() => this.resize()); this.ro.observe($('#g3box')); this.last = 0; this.raf = requestAnimationFrame(t => this.frame(t));
+  },
+  close() {
+    if (!this.on && !$('#g3')?.classList.contains('on')) return; this.on = false; cancelAnimationFrame(this.raf); this.ro?.disconnect(); this.ptr.clear();
+    try { this.scene?.traverse(o => { o.geometry?.dispose(); const m = o.material; if (m) [].concat(m).forEach(x => { x.map?.dispose(); x.dispose(); }); }); this.rd?.dispose(); } catch { }
+    this.rd = this.scene = this.cam = null; const o = $('#g3'); if (o) { o.classList.remove('on'); o.innerHTML = ''; }
+  }
+};
 const mapHTML = () => `<div class="mapscreen">
-  <header class="top c"><div class="row"><button class="cbtn" data-act="map-back" aria-label="Back">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Latin America</div><h1>Trip map</h1></div><div style="width:42px"></div></div></header>
+  <header class="top c"><div class="row"><div class="hside"><button class="cbtn" data-act="map-back" aria-label="Back">${ico('back', 20)}</button></div><div class="tt"><div class="eyebrow">Latin America</div><h1>Trip map</h1></div><div class="hside r"><button class="g3btn" data-act="g3-open" aria-label="Show the trip in 3D">${ico('globe', 20, '#fff', 1.9)}3D</button></div></div></header>
   <div id="mapbox"><svg id="mapsvg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none" aria-hidden="true"><g id="land"></g><path id="rt0" class="rt0" fill="none"/><path id="rt1" class="rt1" fill="none"/><path id="rf1" class="rf1" fill="none"/><path id="rs1" class="rs1" fill="none"/></svg><div id="mappins"></div><div id="mapnote"></div>
     <div class="mapctl"><button class="cbtn" data-act="map-in" aria-label="Zoom in">${ico('plus', 18)}</button><button class="cbtn" data-act="map-out" aria-label="Zoom out">${ico('minus', 18)}</button><button class="cbtn" data-act="map-fit" aria-label="Show everything">${ico('fit', 18)}</button></div></div>
   <div class="mapcard" id="mapcard"></div></div>`;
@@ -2280,7 +2633,7 @@ const mapHTML = () => `<div class="mapscreen">
 // no page zoom: double-tap is blocked by touch-action in the CSS (the map does its own double-tap zoom), pinch by these
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, ev => ev.preventDefault()));
 document.addEventListener('click', async ev => {
-  const mp = ev.target.closest('.mp'); if (mp) { MapV.go(+mp.dataset.i); return; }
+  const mp = ev.target.closest('.mp'); if (mp && !mp.closest('#g3')) { MapV.go(+mp.dataset.i); return; }
   const t = ev.target.closest('[data-act]'); if (!t) return;
   const act = t.dataset.act, e = cur();
   switch (act) {
@@ -2310,7 +2663,13 @@ document.addEventListener('click', async ev => {
     case 'goto': { const d = parse(t.dataset.m); S.month = new Date(d.getFullYear(), d.getMonth(), 1); render(); break; }
     case 'tab': S.tab = t.dataset.tab; rerender(); break;
     case 'map': flush(); S.mapFrom = S.view === 'entry' ? S.openId : ''; S.mapFocus = S.mapFrom; S.mapBack = S.view; S.view = 'map'; render(); scrollTo(0, 0); break;
-    case 'map-back': { REdit.close(); MapV.destroy(); S.mapFocus = ''; if (S.mapFrom && S.entries.some(x => x.id === S.mapFrom)) { S.view = 'entry'; S.openId = S.mapFrom; } else { S.view = S.mapBack && S.mapBack !== 'entry' ? S.mapBack : 'cal'; S.openId = null; } render(); scrollTo(0, 0); break; }
+    case 'g3-open': G3.open(); break;
+    case 'g3-close': G3.close(); break;
+    case 'g3-play': if (G3.t >= G3.total) { G3.jump(0); } else { G3.playing = !G3.playing; G3.sig = ''; G3.paintCard(true); } break;
+    case 'g3-speed': G3.speed = G3.speed === 1 ? 2 : G3.speed === 2 ? .5 : 1; G3.sig = ''; G3.paintCard(true); break;
+    case 'g3-mode': G3.mode = t.dataset.m; G3.free = false; G3.sig = ''; G3.paintCard(true); break;
+    case 'g3-stop': G3.jump(+t.dataset.i); break;
+    case 'map-back': { G3.close(); REdit.close(); MapV.destroy(); S.mapFocus = ''; if (S.mapFrom && S.entries.some(x => x.id === S.mapFrom)) { S.view = 'entry'; S.openId = S.mapFrom; } else { S.view = S.mapBack && S.mapBack !== 'entry' ? S.mapBack : 'cal'; S.openId = null; } render(); scrollTo(0, 0); break; }
     case 'map-in': MapV.zoom(1.6); break;
     case 'map-out': MapV.zoom(1 / 1.6); break;
     case 'map-fit': MapV.fit(true); break;
@@ -2527,7 +2886,7 @@ const Lock = {
     urls.forEach(u => URL.revokeObjectURL(u)); urls.clear();
     S.entries = []; S.photos = []; S.audio = []; S.select = null; Stt.busy.clear();
     Vault.key = null; Vault.rec = null; Vault.apiKey = ''; Vault.stt = null; Vault.geo = null; Vault.usage = null; MapV.destroy();
-    $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = ''; $('#recov').classList.remove('on'); $('#recov').innerHTML = ''; REdit.open = false; $('#redit').classList.remove('on'); $('#redit').innerHTML = '';
+    $('#sheet').classList.remove('on'); $('#sheet .body').innerHTML = ''; $('#app').innerHTML = ''; $('#recov').classList.remove('on'); $('#recov').innerHTML = ''; REdit.open = false; $('#redit').classList.remove('on'); $('#redit').innerHTML = ''; G3.close();
     this.setMode('unlock');
     if (S.update && !Vault.needKey) setTimeout(() => location.reload(), 400); // a new version is waiting: load it now, the app is locked anyway
   },
