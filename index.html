@@ -308,6 +308,14 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .mp .ml{position:absolute;left:32px;top:50%;transform:translateY(-50%);white-space:nowrap;font-weight:700;font-size:11.5px;line-height:1;color:#2E2823;background:rgba(255,253,248,.92);border-radius:9px;padding:4px 7px;max-width:130px;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 4px rgba(80,50,20,.18)}
 .mp.nolab .ml{display:none}
 .mp.fut .ml{opacity:.7}
+.mp.pass i,#g3 .mp.pass i{background:#fff;color:transparent;border:2px solid #A99A84;box-shadow:none;inset:8px;transform:none}.mp.pass .ml{font-weight:600;font-style:italic;color:#6B5F50;left:22px}.mp.pass.sel i{border-color:var(--accent);box-shadow:0 0 0 5px rgba(181,86,47,.2)}
+.mp.via i,#g3 .mp.via i{inset:9px;background:#fff;border:2px solid var(--accent);box-shadow:none}.mp.via .ml,.mv .ml{font-weight:600;font-style:italic;color:#6B5F50;left:20px}
+.mv{position:absolute;left:0;top:0;width:12px;height:12px;pointer-events:none;will-change:transform}.mv i{position:absolute;inset:0;border-radius:50%;background:#fff;border:2.5px solid var(--accent);box-sizing:border-box}.mv .ml{position:absolute;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;line-height:1;background:rgba(255,253,248,.9);border-radius:8px;padding:3px 6px;box-shadow:0 1px 4px rgba(80,50,20,.15)}
+.via{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-2px 0 10px 4px}.vadd{border:0;background:none;color:var(--accent);font-weight:700;font-size:12.5px;padding:4px 6px;cursor:pointer}
+.vchip{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 2px 0 10px;border-radius:14px;background:#EFE7D6;font-size:13px;font-weight:600;color:#5C5043}.vchip button{border:0;background:none;font-size:17px;line-height:1;color:#8B7F70;padding:0 8px;cursor:pointer}
+.vin{display:flex;gap:6px;align-items:center;width:100%}.vin input{flex:1;min-width:0;padding:8px 12px}
+.wpn{display:flex;flex-direction:column;gap:8px;margin:2px 0 10px}.wpn input{padding:9px 12px}.hd .wl{position:absolute;left:40px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;background:rgba(255,253,248,.92);padding:3px 7px;border-radius:8px;white-space:nowrap;pointer-events:none}
+.g3s.pass i{width:16px;height:16px;margin:6px 0;border-width:2px;border-color:#A99A84;background:#fff;font-size:0}.g3s.pass.on i{background:#A99A84}.g3s.pass.cur i{box-shadow:0 0 0 5px rgba(181,86,47,.22)}.g3s.pass span{font-style:italic}
 #mapnote{position:absolute;left:12px;right:70px;top:12px;pointer-events:none}
 #mapnote > *{pointer-events:auto}
 .mchip{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:18px;background:rgba(255,253,248,.96);padding:9px 14px;font-weight:700;font-size:12.5px;line-height:1.2;color:#8A2B16;box-shadow:0 3px 12px rgba(80,50,20,.18);cursor:pointer;text-align:left}
@@ -385,7 +393,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.4'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.5'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -670,7 +678,7 @@ async function load() {
   for (const a of cut) { a.status = 'pending'; await saveAudioMeta(a); }
   if (cut.length) setTimeout(() => toast(cut.length > 1 ? 'Recovered recordings that were cut off' : 'Recovered a recording that was cut off'), 600);
   for (const e of S.entries) e.qa = (e.qa || []).filter(x => !(DROPPED.includes(x.q) && !(x.a || '').trim()));
-  for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; e.talk ??= ''; }
+  for (const e of S.entries) { e.days ||= {}; e.qa ||= []; e.countries ||= []; e.notes ??= ''; e.title ??= ''; e.talk ??= ''; e.via ||= {}; }
   // one-off: answers written before the single story box count as covered
   if (lsGet('tj.talk') !== '1') { for (const e of S.entries) { let ch = false; e.qa.forEach(x => { if (x.a.trim() && !x.done) { x.done = true; ch = true; } }); if (ch) await putEntry(e); } lsSet('tj.talk', '1'); }
   // one-off: chapters made before the standard prompts existed still carry the old random questions
@@ -793,6 +801,7 @@ function render() {
 }
 function rerender() { const y = scrollY; render(); scrollTo(0, y); }
 
+const viaS = (e, d) => (e.via && e.via[d] && e.via[d].length) ? ` (on the way, passed through ${e.via[d].join(', ')} without staying)` : '';
 // which country a day belongs to: the one picked for that day, else the chapter's countries split evenly
 function dayCountry(e, d) {
   const cs = e.countries;
@@ -970,8 +979,9 @@ function entryHTML(e) {
       <div class="addrow"><input id="countryIn" list="countryList" placeholder="${e.countries.length ? 'Crossed into another country?' : 'Add a country'}" enterkeyhint="done" autocomplete="off"><button class="btn" data-act="add-country">Add</button></div>
       <datalist id="countryList">${COUNTRIES.map(c => `<option value="${c}">`).join('')}</datalist></section>
     <section class="sec"><h2>Where you were</h2>
+      <p class="hint" style="margin-top:0">Only passed through somewhere on the way, like landing in one town and driving straight on? Tap “＋ Passed through” on the day you arrived.</p>
       ${e.countries.length > 1 ? '<p class="hint" style="margin-top:0">Use the flag box on each day to say which country you were in, including the day you crossed.</p>' : ''}
-      ${days.map(d => `<label class="dayrow${e.countries.length > 1 ? ' mc' : ''}"><span>${fmt(d, SHORT)}</span><input data-field="day" data-d="${d}" list="placeList" value="${esc(e.days[d] || '')}" placeholder="Town or place" autocomplete="off">${e.countries.length > 1 ? `<select data-change="dc" data-d="${d}" aria-label="Country on ${fmt(d, SHORT)}">${e.countries.map(c => `<option value="${esc(c)}"${c === dayCountry(e, d) ? ' selected' : ''}>${flagOf(c)} ${esc(codeOf(c))}</option>`).join('')}</select>` : ''}</label>`).join('')}
+      ${days.map(d => `<label class="dayrow${e.countries.length > 1 ? ' mc' : ''}"><span>${fmt(d, SHORT)}</span><input data-field="day" data-d="${d}" list="placeList" value="${esc(e.days[d] || '')}" placeholder="Town or place" autocomplete="off">${e.countries.length > 1 ? `<select data-change="dc" data-d="${d}" aria-label="Country on ${fmt(d, SHORT)}">${e.countries.map(c => `<option value="${esc(c)}"${c === dayCountry(e, d) ? ' selected' : ''}>${flagOf(c)} ${esc(codeOf(c))}</option>`).join('')}</select>` : ''}</label>${viaHTML(e, d)}`).join('')}
       ${days.length > 1 ? `<button class="btn small" data-act="fill-days">Use the first day's place for every day</button>` : ''}
       <datalist id="placeList">${places.map(p => `<option value="${esc(p)}">`).join('')}</datalist></section>
     <div class="btns end"><button class="btn danger" data-act="del-entry">Delete chapter</button></div>`;
@@ -1252,7 +1262,7 @@ async function makeStory(e, btn, feedback) {
   if (!aiReady()) return;
   const days = range(e.start, e.end);
   const ctx = [`Chapter ${chapterNo(e)}${e.title ? ': ' + e.title : ''}`, `Dates: ${rangeLabel(e.start, e.end)} (${days.length} days)`, `Countries: ${countryLabel(e) || 'not set'}`,
-    `Places by day: ${days.map(d => `${fmt(d, SHORT)}: ${e.days[d] || '?'}`).join('; ')}`,
+    `Places by day: ${days.map(d => `${fmt(d, SHORT)}: ${e.days[d] || '?'}${viaS(e, d)}`).join('; ')}`,
     e.talk.trim() ? `The chapter as I told it:\n${e.talk.trim()}` : '', ...e.qa.filter(x => x.a.trim()).map(x => `Q: ${x.q}\nA: ${x.a.trim()}`), e.notes.trim() ? `Other notes: ${e.notes.trim()}` : '',
     ...photosOf(e).filter(p => p.caption).map(p => `Photo caption: ${p.caption}`)].filter(Boolean).join('\n\n');
   const sys = `You write the text of a coffee-table book from a traveller's own journal notes: the kind of book people leave out on the living-room table. It has a short evocative title, a confident opening, and short sections.
@@ -1299,7 +1309,7 @@ async function smartQuestions(e, btn, redo) {
   const ctx = [
     `Dates: ${rangeLabel(e.start, e.end)} (${days.length} days)`,
     `Countries: ${countryLabel(e) || 'not set'}`,
-    `Places by day: ${days.map(d => `${fmt(d, SHORT)}: ${e.days[d] || '?'}`).join('; ')}`,
+    `Places by day: ${days.map(d => `${fmt(d, SHORT)}: ${e.days[d] || '?'}${viaS(e, d)}`).join('; ')}`,
     e.talk.trim() ? `Told as a story: ${e.talk.trim()}` : '', ...e.qa.filter(x => x.a.trim()).map(x => `Q: ${x.q}\nA: ${x.a.trim()}`),
     e.notes.trim() ? `Notes: ${e.notes.trim()}` : '',
     ...photosOf(e).filter(p => p.caption).map(p => `Photo: ${p.caption}`)
@@ -1340,7 +1350,7 @@ function chapterMd(e, n, ps, names) {
   const days = range(e.start, e.end);
   L.push(`- **Dates:** ${rangeLabel(e.start, e.end)} (${days.length} day${days.length > 1 ? 's' : ''})`);
   if (e.countries.length) L.push(`- **Country:** ${countryLabel(e)}`);
-  L.push('', '## Where I was', ...days.map(d => `- ${fmt(d, LONG)}: ${e.days[d] || '(not noted)'}${e.countries.length > 1 ? ' (' + dayCountry(e, d) + ')' : ''}`));
+  L.push('', '## Where I was', ...days.map(d => `- ${fmt(d, LONG)}: ${e.days[d] || '(not noted)'}${viaS(e, d)}${e.countries.length > 1 ? ' (' + dayCountry(e, d) + ')' : ''}`));
   const ans = e.qa.filter(x => x.a.trim());
   if (e.talk.trim()) L.push('', '## My story', '', e.talk.trim());
   if (ans.length) { L.push('', e.talk.trim() ? '## Earlier answers' : '## My notes'); ans.forEach(x => L.push('', `**${x.q || 'Note'}**`, '', x.a.trim())); }
@@ -1792,12 +1802,20 @@ const PS = 100, mx = lo => lo * PS, my = la => { const r = Math.max(-80, Math.mi
 const unproj = (x, y) => [(2 * Math.atan(Math.exp(-y / PS * Math.PI / 180)) - Math.PI / 2) * 180 / Math.PI, x / PS];
 const hav = (a, b) => { const R = 6371, t = Math.PI / 180, dLa = (b[0] - a[0]) * t, dLo = (b[1] - a[1]) * t, h = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * t) * Math.cos(b[0] * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
 
+const viaHTML = (e, d) => {
+  const vs = (e.via && e.via[d]) || [];
+  const chips = vs.map((v, k) => `<span class="vchip">${ico('arrow', 13, 'currentColor', 2.2)}${esc(v)}<button data-act="via-del" data-d="${d}" data-k="${k}" aria-label="Remove ${esc(v)}">×</button></span>`).join('');
+  const add = S.viaOpen === d ? `<span class="vin"><input id="viaIn" list="placeList" placeholder="Where did you pass through?" enterkeyhint="done" autocomplete="off"><button class="btn small pri" data-act="via-ok" data-d="${d}">Add</button><button class="txtbtn" data-act="via-no">Cancel</button></span>` : `<button class="vadd" data-act="via-add" data-d="${d}">＋ Passed through</button>`;
+  return `<div class="via">${chips}${add}</div>`;
+};
 function tripStops() {
   const out = [];
   for (const e of chapters()) for (const d of range(e.start, e.end)) {
+    const c = dayCountry(e, d) || e.countries[0] || '', cc = ccOf(c);
+    for (const v of (e.via && e.via[d]) || []) { const vp = (v || '').trim(); if (vp) out.push({ place: vp, country: c, cc, key: NORM(vp) + '|' + (cc || NORM(c)), start: d, end: d, days: 0, eid: e.id, eids: new Set([e.id]), pass: true }); } // somewhere you passed through on the way here, without staying
     const pl = (e.days[d] || '').trim(); if (!pl) continue;
-    const c = dayCountry(e, d) || e.countries[0] || '', cc = ccOf(c), key = NORM(pl) + '|' + (cc || NORM(c)), last = out[out.length - 1];
-    if (last && last.key === key) { last.end = d; last.days++; last.eids.add(e.id); }
+    const key = NORM(pl) + '|' + (cc || NORM(c)), last = out[out.length - 1];
+    if (last && !last.pass && last.key === key) { last.end = d; last.days++; last.eids.add(e.id); }
     else out.push({ place: pl, country: c, cc, key, start: d, end: d, days: 1, eid: e.id, eids: new Set([e.id]) });
   }
   return out;
@@ -1893,8 +1911,8 @@ const MapV = {
     return (this.world = out);
   },
   compute() {
-    const st = tripStops(); this.all = st; this.pts = [];
-    st.forEach(x => { const l = locate(x); x.ll = l ? l.ll : null; x.src = l ? l.src : ''; if (x.ll) { x.x = mx(x.ll[1]); x.y = my(x.ll[0]); x.n = this.pts.length; this.pts.push(x); } });
+    const st = tripStops(); this.all = st; this.pts = []; let real = 0;
+    st.forEach(x => { const l = locate(x); x.ll = l ? l.ll : null; x.src = l ? l.src : ''; if (x.ll) { x.x = mx(x.ll[1]); x.y = my(x.ll[0]); x.n = this.pts.length; x.num = x.pass ? 0 : ++real; this.pts.push(x); } });
   },
   missing() { const m = new Map(); this.all.forEach(x => { if (!x.ll && !m.has(x.key)) m.set(x.key, x); }); return [...m.values()]; },
   async mount() {
@@ -1951,13 +1969,16 @@ const MapV = {
   },
   build() {
     const box = $('#mappins'); if (!box) return;
-    box.innerHTML = this.pts.map((p, i) => `<button class="mp" data-i="${i}" aria-label="${esc(p.place)}"><i>${i + 1}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
+    box.innerHTML = this.pts.map((p, i) => `<button class="mp" data-i="${i}" aria-label="${esc(p.place)}"><i>${p.pass ? '' : p.num}</i><span class="ml">${esc(p.place)}</span></button>`).join('') + (this.vias = this.viaList()).map(v => `<div class="mv"><i></i><span class="ml">${esc(v.name)}</span></div>`).join('');
     const r = $('#rt0'); if (r) r.setAttribute('d', this.legPaths(this.pts.length - 1).all);
+  },
+  viaList() { // points on a trip that you named, like somewhere you passed through
+    const o = []; for (let i = 1; i < this.pts.length; i++) { const r = this.leg(i); if (r && r.wn) r.wp.forEach((w, j) => { if (r.wn[j]) o.push({ x: mx(w[1]), y: my(w[0]), name: r.wn[j] }); }); } return o;
   },
   update() {
     const svg = $('#mapsvg'); if (!svg || !this.vb) return; const v = this.vb;
     svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
-    const today = iso(new Date()), k = this.W / v.w, f = S.mapFocus, rects = [], order = this.pts.map((_, i) => i).sort((a, b) => (b === this.idx) - (a === this.idx) || this.pts[b].days - this.pts[a].days);
+    const today = iso(new Date()), k = this.W / v.w, kk = k, f = S.mapFocus, rects = [], order = this.pts.map((_, i) => i).sort((a, b) => (b === this.idx) - (a === this.idx) || this.pts[b].days - this.pts[a].days);
     const els = $$('#mappins .mp'), done = new Array(els.length);
     for (const i of order) {
       const p = this.pts[i], el = els[i]; if (!el) continue;
@@ -1965,13 +1986,14 @@ const MapV = {
       el.style.display = out ? 'none' : '';
       if (out) continue;
       el.style.transform = `translate(${sx - 14}px,${sy - 14}px)`;
-      el.className = 'mp' + (p.start > today ? ' plan' : '') + (i === this.idx ? ' sel' : i < this.idx ? ' past' : ' fut') + (f && p.eids.has(f) ? ' foc' : '');
+      el.className = 'mp' + (p.start > today ? ' plan' : '') + (i === this.idx ? ' sel' : i < this.idx ? ' past' : ' fut') + (p.pass ? ' pass' : '') + (f && p.eids.has(f) ? ' foc' : '');
       const w = Math.min(130, p.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
       const clash = rects.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0) || sx + 16 + w > this.W + 4;
       el.classList.toggle('nolab', (clash || sx < 10) && i !== this.idx);
       if (!clash || i === this.idx) rects.push(r);
       else rects.push({ x0: sx - 14, x1: sx + 14, y0: sy - 14, y1: sy + 14 });
     }
+    $$('#mappins .mv').forEach((el, k) => { const q = (this.vias || [])[k]; if (!q) return; const sx = (q.x - v.x) * kk, sy = (q.y - v.y) * kk, out = sx < -20 || sy < -20 || sx > this.W + 20 || sy > this.H + 20; el.style.display = out ? 'none' : ''; if (!out) el.style.transform = `translate(${sx - 6}px,${sy - 6}px)`; });
     this.route();
   },
   route() {
@@ -2034,7 +2056,7 @@ const MapV = {
     let st = 'Straight line. Choose how you got here.';
     if (r) {
       const km = Math.round(this.legKm(i)), roads = r.parts.filter(q => q.m === 'road');
-      if (ms.length > 1) st = `A mix: ${r.parts.map(q => MODES[q.m].join(' ')).join(', then ')} · about ${km} km.`;
+      if (ms.length > 1) st = `A mix: ${r.parts.map((q, k) => MODES[q.m].join(' ') + (k < r.wp.length && r.wn && r.wn[k] ? ' to ' + esc(r.wn[k]) : '')).join(', then ')} · about ${km} km.`;
       else if (one === 'road') st = roads.some(q => q.none) ? 'No road route found, so it stays a straight line.' : roads.every(q => q.p) ? `Following the main roads · ${km} km. Tap Drove again to redo it.` : navigator.onLine ? (this.lastErr ? `Couldn’t get the route (${esc(this.lastErr)}). Tap Drove to try again.` : 'Finding the road route…') : 'The route is drawn when you next have signal.';
       else if (one === 'sail') st = `Sailed · about ${km} km. Bend it or add points with Edit route.`;
       else st = r.wp.length || r.parts.some(q => q.h) ? `Flew · about ${km} km.` : 'Straight line, like a flight.';
@@ -2079,13 +2101,13 @@ const MapV = {
   panel() {
     const c = $('#mapcard'); if (!c) return;
     const P = this.pts, A = this.all, miss = this.missing();
-    const ccs = new Set(A.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
+    const RS = A.filter(x => !x.pass), ccs = new Set(A.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
     let km = 0; for (let i = 1; i < P.length; i++) km += this.legKm(i);
-    const stats = `<div class="mstats"><div><b>${A.length}</b><span>stop${A.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km, roughly</span></div></div>`;
+    const stats = `<div class="mstats"><div><b>${RS.length}</b><span>stop${RS.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km, roughly</span></div></div>`;
     if (!P.length) { c.innerHTML = `${stats}<p class="hint" style="margin:10px 0 0">${A.length ? 'None of your places are on the map yet. Tap “Place them” above to find or drop them.' : 'Add a place to a day in a chapter and it shows up here.'}</p>`; this.note(miss); return; }
     const p = P[this.idx];
     c.innerHTML = `${stats}
-      <div class="mstop"><div style="min-width:0;flex:1"><b>${this.idx + 1}. ${esc(p.place)}</b><small>${flagOf(p.country)} ${esc(p.country || '')} · ${rangeLabel(p.start, p.end)}${p.days > 1 ? ' · ' + p.days + ' days' : ''}${p.start > iso(new Date()) ? '<span class="mplan">Planned</span>' : ''}</small></div><button class="btn small" data-act="map-move">Move pin</button><button class="btn small pri" data-act="map-open" data-id="${p.eid}">Chapter</button></div>
+      <div class="mstop"><div style="min-width:0;flex:1"><b>${p.pass ? 'Passing through ' + esc(p.place) : p.num + '. ' + esc(p.place)}</b><small>${flagOf(p.country)} ${esc(p.country || '')} · ${rangeLabel(p.start, p.end)}${p.pass ? ' · no overnight stay' : p.days > 1 ? ' · ' + p.days + ' days' : ''}${p.start > iso(new Date()) ? '<span class="mplan">Planned</span>' : ''}</small></div><button class="btn small" data-act="map-move">Move pin</button><button class="btn small pri" data-act="map-open" data-id="${p.eid}">Chapter</button></div>
       ${this.legRow()}
       <div class="mctl"><button class="circ" data-act="map-play" aria-label="${this.timer ? 'Pause' : 'Play the journey'}">${ico(this.timer ? 'pause' : 'play', 20, '#B5562F', 2.2)}</button><div style="flex:1;min-width:0"><input type="range" id="mapidx" min="0" max="${Math.max(0, P.length - 1)}" value="${this.idx}" aria-label="Move through the trip"><div class="mdates"><span>${fmt(P[0].start, SHORT)}</span><span>${fmt(P[P.length - 1].end, SHORT)}</span></div></div></div>`;
     this.note(miss);
@@ -2181,6 +2203,7 @@ const REdit = {
   },
   close() { if (!this.open) return; this.open = false; this.ro?.disconnect(); const o = $('#redit'); o.classList.remove('on'); o.innerHTML = ''; this.ptr.clear(); if (MapV.alive) { MapV.build(); MapV.update(); MapV.panel(); } },
   R() { return MapV.leg(this.i); },
+  names(r) { r.wn = (r.wn || []).slice(0, r.wp.length); while (r.wn.length < r.wp.length) r.wn.push(''); return r.wn; },
   A() { return MapV.anchors(this.i); },
   fit() {
     const A = this.A(), r = this.R(), pts = [...A]; r.parts.forEach((q, k) => { if (q.h && q.m !== 'road') pts.push(...partCtl(A, k, q)); });
@@ -2197,13 +2220,19 @@ const REdit = {
     if (!hint) hint = curve ? 'Drag the two white dots to bend this part.' : q.none ? 'No road found for this part, so it stays a straight line.' : q.p && !q.redo ? 'Following the main roads. Drag a numbered point to steer the road through it.' : navigator.onLine ? (MapV.lastErr ? 'Couldn’t get the road yet. It will try again.' : 'Finding the road route…') : 'The road is drawn when you next have signal.';
     el.innerHTML = `${n > 1 ? `<div class="rechips">${chips}</div>` : ''}<div class="mseg">${mode('fly')}${mode('road')}${mode('sail')}</div>
       <p class="rh">${hint}</p>
+      ${this.selWp >= 0 ? this.nameBox(r) : ''}
       <div class="btns"><button class="btn small" data-act="re-add">＋ Add a point</button><button class="btn small" data-act="re-rm"${this.selWp < 0 ? ' disabled' : ''}>Remove point</button>${curve && q.h ? '<button class="btn small" data-act="re-straight">Straighten</button>' : ''}</div>
       ${n === 1 ? '<p class="rh" style="margin-top:8px">Changed how you travelled halfway? Add a point where you switched, then pick the part after it and choose its mode.</p>' : ''}`;
+  },
+  nameBox(r) {
+    const j = this.selWp, nm = (r.wn && r.wn[j]) || '', w = r.wp[j]; let g = null, best = 30;
+    for (const z of GAZ) { const d = hav(w, z.ll); if (d < best) { best = d; g = z; } }
+    return `<div class="wpn"><input id="wpname" data-field="wpname" data-j="${j}" placeholder="Name this point, like a town you passed through (optional)" value="${esc(nm)}" autocomplete="off" enterkeyhint="done">${g && g.name !== nm ? `<button class="btn small" data-act="re-name" data-n="${esc(g.name)}">Name it ${esc(g.name)}</button>` : ''}</div>`;
   },
   dots() {
     const el = $('#redots'); if (!el) return; const M = MapV, r = this.R(), q = r.parts[this.sel], a = M.pts[this.i - 1], b = M.pts[this.i];
     el.innerHTML = `<div class="ep" data-e="0"><i></i><span>${esc(a.place)}</span></div><div class="ep" data-e="1"><i></i><span>${esc(b.place)}</span></div>`
-      + r.wp.map((_, j) => `<button class="hd wp${j === this.selWp ? ' sel' : ''}" data-t="wp" data-j="${j}" aria-label="Point ${j + 1}"><i>${j + 1}</i></button>`).join('')
+      + r.wp.map((_, j) => `<button class="hd wp${j === this.selWp ? ' sel' : ''}" data-t="wp" data-j="${j}" aria-label="Point ${j + 1}"><i>${j + 1}</i>${r.wn && r.wn[j] ? `<span class="wl">${esc(r.wn[j])}</span>` : ''}</button>`).join('')
       + (q.m !== 'road' ? [0, 1].map(w => `<button class="hd ch" data-t="h" data-w="${w}" aria-label="Bend handle ${w + 1}"><i></i></button>`).join('') : '');
   },
   draw() {
@@ -2238,7 +2267,7 @@ const REdit = {
       const c = partCtl(A, k, q), mi = (u, w) => [(u[0] + w[0]) / 2, (u[1] + w[1]) / 2], Q0 = mi(p, c[0]), Q1 = mi(c[0], c[1]), Q2 = mi(c[1], n), R0 = mi(Q0, Q1), R1 = mi(Q1, Q2), S = mi(R0, R1);
       mid = ll4(S); L = { m: q.m, h: [...ll4(Q0), ...ll4(R0)] }; Rt = { m: q.m, h: [...ll4(R1), ...ll4(Q2)] };
     } else { mid = ll4([(p[0] + n[0]) / 2, (p[1] + n[1]) / 2]); L = { ...q }; Rt = { ...q }; delete L.h; delete Rt.h; if (q.m === 'road') { delete L.p; delete Rt.p; delete L.km; delete Rt.km; } }
-    r.wp.splice(k, 0, mid); r.parts.splice(k, 1, L, Rt); this.selWp = k; this.sel = k + 1;
+    this.names(r); r.wn.splice(k, 0, ''); r.wp.splice(k, 0, mid); r.parts.splice(k, 1, L, Rt); this.selWp = k; this.sel = k + 1;
     this.note = 'Point added. Drag it into place. The buttons now change the part after it.';
     await this.save(q.m === 'road' && !pts.length);
   },
@@ -2246,7 +2275,7 @@ const REdit = {
     const j = this.selWp; if (j < 0) return; const r = this.R(), L = r.parts[j], Rt = r.parts[j + 1]; let m;
     if (L.m === 'road' && Rt.m === 'road') m = { m: 'road', redo: 1 };
     else m = { m: L.m, ...(L.m !== 'road' && L.h && Rt.h && Rt.m === L.m ? { h: [L.h[0], L.h[1], Rt.h[2], Rt.h[3]] } : {}) };
-    r.wp.splice(j, 1); r.parts.splice(j, 2, m); this.sel = j; this.selWp = -1; this.note = '';
+    this.names(r).splice(j, 1); r.wp.splice(j, 1); r.parts.splice(j, 2, m); this.sel = j; this.selWp = -1; this.note = '';
     await this.save(m.m === 'road');
   },
   bind(box) {
@@ -2462,8 +2491,10 @@ const G3 = {
       if (P.m === 'fly') { P.shd = line(0x5A4632, .0004, .22); tube(P.U.map(u => u.clone().multiplyScalar(1.0008)), .0004, P.shd); }
     }
     // stops
-    this.pin = M.pts.map(p => this.v3(p.ll[0], p.ll[1], 1.004));
-    $('#g3pins').innerHTML = M.pts.map((p, i) => `<button class="mp" data-act="g3-stop" data-i="${i}" aria-label="${esc(p.place)}"><i>${i + 1}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
+    const wps = []; this.legs.forEach(lg => { const r = M.leg(lg.i); (r && r.wn || []).forEach((n, j) => { if (n && r.wp[j]) wps.push({ place: n, ll: r.wp[j], kind: 'wp' }); }); });
+    this.pl = [...M.pts.map((p, i) => ({ place: p.place, ll: p.ll, kind: p.pass ? 'pass' : 'stop', i, st: p })), ...wps];
+    this.pin = this.pl.map(p => this.v3(p.ll[0], p.ll[1], 1.004));
+    $('#g3pins').innerHTML = this.pl.map(p => p.kind === 'wp' ? `<div class="mp via"><i></i><span class="ml">${esc(p.place)}</span></div>` : `<button class="mp${p.kind === 'pass' ? ' pass' : ''}" data-act="g3-stop" data-i="${p.i}" aria-label="${esc(p.place)}"><i>${p.kind === 'pass' ? '' : p.st.num}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
     // the traveller
     this.mod = this.models(); this.veh = new T.Group(); for (const k in this.mod) { this.mod[k].visible = false; this.veh.add(this.mod[k]); } scene.add(this.veh);
     this.shade = new T.Mesh(new T.CircleGeometry(.5, 24), new T.MeshBasicMaterial({ color: 0x2E2823, transparent: true, opacity: .2, depthWrite: false })); scene.add(this.shade);
@@ -2512,7 +2543,7 @@ const G3 = {
   frame(now) {
     if (!this.on) return; this.raf = requestAnimationFrame(t => this.frame(t));
     const dt = Math.min(.05, (now - (this.last || now)) / 1000); this.last = now;
-    if (this.playing && this.legs.length) { this.t += dt * this.speed * 2; // 1× is twice the first pace if (this.t >= this.total) { this.t = this.total; this.playing = false; this.paintCard(true); } }
+    if (this.playing && this.legs.length) { this.t += dt * this.speed * 2; if (this.t >= this.total) { this.t = this.total; this.playing = false; this.paintCard(true); } }
     const s = this.legs.length ? this.state(Math.max(this.LEAD * 0, this.t)) : null;
     if (s) { this.st = s; this.place(s, dt); }
     // camera: smooth towards where it should be
@@ -2533,18 +2564,18 @@ const G3 = {
   pins() {
     const els = $$('#g3pins .mp'), M = MapV, W = this.W, H = this.H, cp = this.cam.position, cd = cp.length(), ch = cp.clone().normalize(), rects = [], today = iso(new Date());
     const L = this.st ? this.st.L : 0, dest = this.legs.length ? L + 1 : 0, reached = i => i === 0 ? this.t >= this.LEAD : this.t >= this.legs[i - 1].start + this.legs[i - 1].dur - this.DW;
-    const order = els.map((_, i) => i).sort((a, b) => (b === dest) - (a === dest) || (b === L) - (a === L) || M.pts[b].days - M.pts[a].days);
-    for (const i of order) {
-      const el = els[i], p = this.pin[i], v = p.clone().project(this.cam), front = p.clone().normalize().dot(ch) > 1 / cd + .015 && v.z < 1;
+    const pr = k => { const q = this.pl[k]; return q.kind === 'wp' ? -1 : q.i === dest ? 3 : q.i === L ? 2 : q.kind === 'pass' ? 0 : 1; };
+    const order = els.map((_, k) => k).sort((a, b) => pr(b) - pr(a) || ((this.pl[b].st ? this.pl[b].st.days : 0) - (this.pl[a].st ? this.pl[a].st.days : 0)));
+    for (const k of order) {
+      const q = this.pl[k], el = els[k], p = this.pin[k], v = p.clone().project(this.cam), front = p.clone().normalize().dot(ch) > 1 / cd + .015 && v.z < 1;
       const sx = (v.x * .5 + .5) * W, sy = (-v.y * .5 + .5) * H, out = !front || sx < -28 || sy < -28 || sx > W + 28 || sy > H + 28;
       el.style.display = out ? 'none' : ''; if (out) continue;
       el.style.transform = `translate(${sx - 14}px,${sy - 14}px)`;
-      const st = M.pts[i], past = reached(i), cls = 'mp' + (st.start > today ? ' plan' : '') + (i === dest ? ' sel' : past ? ' past' : ' fut');
-      if (el.className.replace(' nolab', '') !== cls) el.className = cls;
-      const w = Math.min(130, st.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
-      const clash = rects.some(q => r.x0 < q.x1 && r.x1 > q.x0 && r.y0 < q.y1 && r.y1 > q.y0) || sx + 16 + w > W + 4;
-      el.classList.toggle('nolab', clash && i !== dest);
-      rects.push(clash && i !== dest ? { x0: sx - 14, x1: sx + 14, y0: sy - 14, y1: sy + 14 } : r);
+      if (q.kind !== 'wp') { const i = q.i, st = q.st, past = reached(i), cls = 'mp' + (q.kind === 'pass' ? ' pass' : '') + (st.start > today ? ' plan' : '') + (i === dest ? ' sel' : past ? ' past' : ' fut'); if (el.className.replace(' nolab', '') !== cls) el.className = cls; }
+      const sel = q.kind !== 'wp' && q.i === dest, w = Math.min(130, q.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
+      const clash = rects.some(z => r.x0 < z.x1 && r.x1 > z.x0 && r.y0 < z.y1 && r.y1 > z.y0) || sx + 16 + w > W + 4;
+      el.classList.toggle('nolab', clash && !sel);
+      rects.push(clash && !sel ? { x0: sx - 14, x1: sx + 14, y0: sy - 14, y1: sy + 14 } : r);
     }
     this.trail();
   },
@@ -2560,7 +2591,7 @@ const G3 = {
   stepsHTML() {
     const M = MapV; let h = '';
     M.pts.forEach((p, i) => {
-      h += `<button class="g3s" data-act="g3-stop" data-i="${i}" data-n="${i}"><i>${i + 1}</i><span>${esc(p.place)}</span></button>`;
+      h += `<button class="g3s${p.pass ? ' pass' : ''}" data-act="g3-stop" data-i="${i}" data-n="${i}"><i>${p.pass ? '' : p.num}</i><span>${esc(p.place)}</span></button>`;
       if (i < M.pts.length - 1) { const ms = [...new Set(this.legs[i].parts.map(q => q.m))]; h += `<em class="g3c" data-n="${i}">${ms.map(m => MODES[m][0]).join('')}</em>`; }
     });
     return h;
@@ -2573,7 +2604,8 @@ const G3 = {
     if (!this.legs.length) { c.innerHTML = `<div class="g3hd"><div><b>${esc(M.pts[0].place)}</b><small>Add another place to a chapter and the trip will travel between them.</small></div></div>`; return; }
     const lg = this.legs[L], a = M.pts[lg.i - 1], b = M.pts[lg.i], done = this.t >= this.total, vv = [...new Set(lg.parts.map(q => q.m))];
     const km = Math.round(lg.km), kmT = km >= 100 ? Math.round(km / 10) * 10 : km;
-    const what = vv.length > 1 ? 'A mix: ' + lg.parts.map(q => this.verb(q.m)[1]).join(', then ').toLowerCase().replace(/^./, x => x.toUpperCase()) : this.verb(vv[0])[1];
+    const rr = M.leg(lg.i), nm = j => (rr && rr.wn && rr.wn[j]) || '', names = ((rr && rr.wn) || []).filter(Boolean);
+    const what = vv.length > 1 ? lg.parts.map((q, k) => { const v = this.verb(q.m)[1]; return (k ? v.toLowerCase() : v) + (k < lg.parts.length - 1 && nm(k) ? ' to ' + esc(nm(k)) : ''); }).join(', then ') : this.verb(vv[0])[1] + (names.length ? ' via ' + names.map(esc).join(', ') : '');
     const chip = $('#g3chip'); if (chip) chip.innerHTML = `<span>${done ? 'Trip finished' : this.verb(ms)[0] + ' to ' + esc(b.place)}</span><small>${done ? n + ' stops' : 'leg ' + (L + 1) + ' of ' + (n - 1)}</small>`;
     const old = $('#g3steps'), sl = old ? old.scrollLeft : 0;
     c.innerHTML = `<div class="g3hd"><div style="min-width:0;flex:1"><b>${esc(a.place)} → ${esc(b.place)}</b><small>${what} · about ${kmT} km</small></div><button class="g3sp" data-act="g3-speed" aria-label="Speed">${this.speed}×</button><button class="cbtn g3play" data-act="g3-play" aria-label="${this.playing ? 'Pause' : done ? 'Play again' : 'Play'}">${done ? ico('fit', 18) : ico(this.playing ? 'pause' : 'play', 20, 'currentColor', 2.2)}</button></div>
@@ -2663,6 +2695,11 @@ document.addEventListener('click', async ev => {
     case 'goto': { const d = parse(t.dataset.m); S.month = new Date(d.getFullYear(), d.getMonth(), 1); render(); break; }
     case 'tab': S.tab = t.dataset.tab; rerender(); break;
     case 'map': flush(); S.mapFrom = S.view === 'entry' ? S.openId : ''; S.mapFocus = S.mapFrom; S.mapBack = S.view; S.view = 'map'; render(); scrollTo(0, 0); break;
+    case 'via-add': S.viaOpen = t.dataset.d; rerender(); setTimeout(() => $('#viaIn')?.focus(), 40); break;
+    case 'via-no': S.viaOpen = ''; rerender(); break;
+    case 'via-ok': { const v = ($('#viaIn')?.value || '').trim(); if (v && e) { e.via ||= {}; (e.via[t.dataset.d] ||= []).push(v); await saveEntry(e); } S.viaOpen = ''; rerender(); break; }
+    case 'via-del': { const d = t.dataset.d; if (e && e.via && e.via[d]) { e.via[d].splice(+t.dataset.k, 1); if (!e.via[d].length) delete e.via[d]; await saveEntry(e); } rerender(); break; }
+    case 're-name': { const r = REdit.R(); REdit.names(r)[REdit.selWp] = t.dataset.n; await REdit.save(false); break; }
     case 'g3-open': G3.open(); break;
     case 'g3-close': G3.close(); break;
     case 'g3-play': if (G3.t >= G3.total) { G3.jump(0); } else { G3.playing = !G3.playing; G3.sig = ''; G3.paintCard(true); } break;
@@ -2773,6 +2810,7 @@ document.addEventListener('input', ev => {
   if (t.tagName === 'TEXTAREA') autosize(t);
   if (f === 'key') { Vault.apiKey = v.trim(); sched('apikey', () => Vault.saveApiKey()); return; }
   if (f === 'sttkey' || f === 'sttlang') { Vault.stt[f === 'sttkey' ? 'key' : 'lang'] = v.trim(); sched('stt', async () => { await Vault.saveStt(); Stt.run(); }); return; }
+  if (f === 'wpname') { const r = REdit.open && REdit.R(); if (r) { REdit.names(r)[+t.dataset.j] = v.trim(); sched('wpn', async () => { await Vault.saveGeo(); if (MapV.alive) MapV.build(); }); } return; }
   if (f === 'pcap' || f === 'pplace') { const p = S.photos.find(x => x.id === t.dataset.id); p[f === 'pcap' ? 'caption' : 'place'] = v; schedPhoto(p); return; }
   if (!e) return;
   if (f === 'title') e.title = v;
@@ -2810,7 +2848,7 @@ document.addEventListener('change', async ev => {
     const file = t.files[0]; t.value = ''; if (file) restore(file);
   }
 });
-document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } });
+document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } if (ev.target.id === 'viaIn' && ev.key === 'Enter') { ev.preventDefault(); $('[data-act="via-ok"]')?.click(); } });
 window.addEventListener('pagehide', () => { flush(); if (Rec.active) { Rec.cut = true; Rec.stop(); } });
 window.addEventListener('online', () => { Stt.run(); Cover.retryAll(); paintVoice(); SW.check(true); if (MapV.alive) MapV.fetchPending(); });
 window.addEventListener('offline', () => { paintVoice(); Rec.overlay(); });
