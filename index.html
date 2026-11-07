@@ -385,7 +385,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.3'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.4'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2512,7 +2512,7 @@ const G3 = {
   frame(now) {
     if (!this.on) return; this.raf = requestAnimationFrame(t => this.frame(t));
     const dt = Math.min(.05, (now - (this.last || now)) / 1000); this.last = now;
-    if (this.playing && this.legs.length) { this.t += dt * this.speed; if (this.t >= this.total) { this.t = this.total; this.playing = false; this.paintCard(true); } }
+    if (this.playing && this.legs.length) { this.t += dt * this.speed * 2; // 1× is twice the first pace if (this.t >= this.total) { this.t = this.total; this.playing = false; this.paintCard(true); } }
     const s = this.legs.length ? this.state(Math.max(this.LEAD * 0, this.t)) : null;
     if (s) { this.st = s; this.place(s, dt); }
     // camera: smooth towards where it should be
