@@ -260,7 +260,8 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .g3s i{width:28px;height:28px;border-radius:50%;box-sizing:border-box;border:2px solid #E7C9B6;background:#fff;color:var(--accent);font:800 12px/24px var(--serif,inherit);font-style:normal;text-align:center}
 .g3s.on i{background:var(--accent);border-color:var(--accent);color:#fff}.g3s.cur i{box-shadow:0 0 0 5px rgba(181,86,47,.22)}
 .g3s span{font-size:11px;font-weight:600;line-height:1.15;max-width:62px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5C5043}
-.g3c{flex:none;width:34px;height:28px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;position:relative;color:#9A8C7A}
+.g3c b{position:relative;z-index:1;background:var(--card);padding:2px 4px;font-weight:400;font-size:15px;line-height:1;color:#8B7F70}
+.g3c{flex:none;width:44px;height:28px;display:flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;position:relative;color:#9A8C7A}
 .g3c::before{content:"";position:absolute;left:0;right:0;top:50%;height:3px;margin-top:-1.5px;background:#E9DDC8;border-radius:2px;z-index:0}
 .g3c.on::before{background:var(--accent)}.g3c.cur::before{background:linear-gradient(90deg,var(--accent),#E9DDC8)}
 .g3c{z-index:0}.g3c{background:none}
@@ -393,7 +394,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.5'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.6'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2592,7 +2593,7 @@ const G3 = {
     const M = MapV; let h = '';
     M.pts.forEach((p, i) => {
       h += `<button class="g3s${p.pass ? ' pass' : ''}" data-act="g3-stop" data-i="${i}" data-n="${i}"><i>${p.pass ? '' : p.num}</i><span>${esc(p.place)}</span></button>`;
-      if (i < M.pts.length - 1) { const ms = [...new Set(this.legs[i].parts.map(q => q.m))]; h += `<em class="g3c" data-n="${i}">${ms.map(m => MODES[m][0]).join('')}</em>`; }
+      if (i < M.pts.length - 1) { const ms = [...new Set(this.legs[i].parts.map(q => q.m))]; h += `<em class="g3c" data-n="${i}"><b>${ms.map(m => MODES[m][0]).join('')}</b></em>`; }
     });
     return h;
   },
