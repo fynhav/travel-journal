@@ -1,4 +1,4 @@
-// Travel Journal service worker: keeps the whole app on the phone so it opens with no signal.
+// Travel Journal service worker (v2):  keeps the whole app on the phone so it opens with no signal.
 // The page registers it as sw.js?v=<app version>; a new version means a new URL, so a new cache.
 const V = new URL(self.location.href).searchParams.get('v') || 'dev';
 const CACHE = 'tj-' + V;
@@ -32,6 +32,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return; // never touch the transcription and Claude calls
   if (url.searchParams.has('cb')) return; // update checks must reach the network
   if (req.mode === 'navigate') {
+    e.waitUntil(self.registration.update().catch(() => { })); // look for a newer version every time the app opens, not just once a day
     e.respondWith(caches.match(new URL('index.html', SCOPE).href).then(r => r || fetch(req)));
     return;
   }
