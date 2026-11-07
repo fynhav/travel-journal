@@ -318,7 +318,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-03.6'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-07.1'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -937,7 +937,7 @@ function openSettings() {
       <p class="hint" style="margin-top:0">If you forget your password, “Forgot password?” on the lock screen accepts your recovery key. Making a new key cancels the old one.</p>
       <div class="btns"><button class="btn" data-act="new-rk">Make a new recovery key</button></div></section>
     <section class="sec"><h2>Voice notes</h2>
-      <p class="hint" style="margin-top:0">Tap Record under any question. The audio is sent to the service below to be turned into text, then deleted from your phone. Without signal it waits and is sent later.</p>
+      <p class="hint" style="margin-top:0">Tap Record under any question. The audio is sent to the service below to be turned into text, then deleted from your phone. Without signal it waits and is sent later. An iPhone pauses web apps as soon as you leave them, so keep the journal open on screen while a note is being turned into text. If you leave, it picks up again as soon as you come back.</p>
       <label>Transcription service<select data-change="sttprov">${Object.entries(STT).map(([k, v]) => `<option value="${k}"${Vault.stt.provider === k ? ' selected' : ''}>${v.name}</option>`).join('')}</select></label>
       <p class="hint">${esc(STT[Vault.stt.provider].hint)}</p>
       <label>${STT[Vault.stt.provider].name} API key<input type="password" data-field="sttkey" value="${esc(Vault.stt.key)}" placeholder="${Vault.stt.provider === 'groq' ? 'gsk_…' : 'sk-…'}" autocomplete="off"></label>
@@ -1440,7 +1440,10 @@ async function cleanText(text, places) {
   return out;
 }
 const Stt = {
-  running: false, busy: new Set(), stall: false, ctl: {}, t0: {}, tick: 0,
+  running: false, busy: new Set(), stall: false, ctl: {}, t0: {}, tick: 0, hid: {}, wl: null,
+  // an iPhone pauses a web app the moment you leave it, so keep the screen awake while a note is being sent and restart straight away if it was interrupted
+  async hold() { if (this.wl) return; try { this.wl = await navigator.wakeLock?.request('screen'); if (this.wl) this.wl.addEventListener('release', () => { this.wl = null; }); } catch {} },
+  drop() { try { if (this.wl) this.wl.release(); } catch {} this.wl = null; },
   ready: () => !!(Vault.key && Vault.stt && Vault.stt.key),
   async run() {
     if (this.running || Lock.locked || !this.ready() || !navigator.onLine) return;
@@ -1454,7 +1457,7 @@ const Stt = {
   },
   async one(id, gen) {
     const m = S.audio.find(a => a.id === id); if (!m) return;
-    this.busy.add(id); this.t0[id] = Date.now(); paintVoice();
+    this.busy.add(id); this.t0[id] = Date.now(); this.hid[id] = false; this.hold(); paintVoice();
     if (!this.tick) this.tick = setInterval(() => { if (!this.busy.size) { clearInterval(this.tick); this.tick = 0; } else paintVoice(); }, 3000);
     const ctl = new AbortController(); this.ctl[id] = ctl; let tm = 0, mb = 1;
     try {
@@ -1476,14 +1479,14 @@ const Stt = {
       toast('Voice note added');
     } catch (er) {
       if (Lock.gen !== gen) return;
-      if (ctl.signal.reason === 'restart') { m.nerr = 0; setTimeout(() => this.run(), 300); }
+      if (ctl.signal.reason === 'restart' || this.hid[id]) { m.nerr = 0; m.retryAt = 0; setTimeout(() => this.run(), 800); } // interrupted by leaving the app, not a real failure
       else if (er.net && !navigator.onLine) { this.stall = true; /* stays queued until there is signal */ }
       else if (er.net && (m.nerr = (m.nerr || 0) + 1) < 6) { // weak signal or a slow answer: wait longer after each miss, and longer still for a big recording
         m.why = er.message; const wait = Math.min(600, 30 * Math.max(1, mb / 5) * 2 ** (m.nerr - 1)) * 1000; m.retryAt = Date.now() + wait;
         try { await saveAudioMeta(m); } catch {} setTimeout(() => this.run(), wait + 500);
       }
       else { m.status = 'failed'; m.err = er.message || 'Something went wrong'; try { await saveAudioMeta(m); } catch {} }
-    } finally { clearTimeout(tm); delete this.ctl[id]; delete this.t0[id]; this.busy.delete(id); paintVoice(); if (S.view === 'cal') rerender(); }
+    } finally { clearTimeout(tm); delete this.ctl[id]; delete this.t0[id]; delete this.hid[id]; this.busy.delete(id); if (!this.busy.size) this.drop(); paintVoice(); if (S.view === 'cal') rerender(); }
   }
 };
 const BARS = 36;
@@ -1595,7 +1598,7 @@ function voiceInner(e, t) {
   const mine = S.audio.filter(a => a.entryId === e.id && a.t === t && a.status !== 'recording');
   let h = '';
   for (const a of mine) {
-    if (Stt.busy.has(a.id)) { const el = Math.round((Date.now() - (Stt.t0[a.id] || Date.now())) / 1000); h += `<span class="vchip">⏳ Turning ${fmtDur(a.dur)} of speech into text… ${el >= 10 ? Math.floor(el / 60) + ':' + String(el % 60).padStart(2, '0') : ''}${el >= 60 ? '<button data-act="v-restart" data-id="' + a.id + '">Restart</button>' : ''}</span>`; }
+    if (Stt.busy.has(a.id)) { const el = Math.round((Date.now() - (Stt.t0[a.id] || Date.now())) / 1000); h += `<span class="vchip">⏳ Turning ${fmtDur(a.dur)} of speech into text… ${el >= 10 ? Math.floor(el / 60) + ':' + String(el % 60).padStart(2, '0') + ' · keep the app open' : ''}${el >= 60 ? '<button data-act="v-restart" data-id="' + a.id + '">Restart</button>' : ''}</span>`; }
     else if (a.status === 'failed') h += `<span class="vchip bad">⚠︎ ${esc(a.err || 'Failed')}. Your recording is safe on this phone.<button data-act="v-retry" data-id="${a.id}">Retry</button><button data-act="v-del" data-id="${a.id}">Delete</button></span>`;
     else {
       const why = !Stt.ready() ? 'needs a key in Settings' : !navigator.onLine ? 'waiting for signal' : Stt.running ? 'next in line, another recording is being turned into text first' : a.retryAt > Date.now() ? `the last try didn't get through (${esc(a.why || 'weak signal')}). Trying again in ${(w => w >= 90 ? Math.round(w / 60) + ' minutes' : w + ' seconds')(Math.ceil((a.retryAt - Date.now()) / 1000))}` : 'starting any moment';
@@ -2135,10 +2138,13 @@ window.addEventListener('online', () => { Stt.run(); paintVoice(); SW.check(true
 window.addEventListener('offline', () => { paintVoice(); Rec.overlay(); });
 setInterval(() => { if (!document.hidden) Stt.run(); }, 30000);
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { flush(); Lock.hiddenAt = Date.now(); if (Rec.active) { Rec.cut = true; Rec.stop(); } }
+  if (document.hidden) { flush(); Lock.hiddenAt = Date.now(); Stt.busy.forEach(id => { Stt.hid[id] = true; }); if (Rec.active) { Rec.cut = true; Rec.stop(); } }
   else if (Rec.cut) { Rec.cut = false; toast('Recording stopped when you left the app. What you said so far was saved.'); }
   if (!document.hidden && Lock.ready && !Lock.locked && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
-  else if (!document.hidden) Stt.run();
+  else if (!document.hidden) {
+    if (Stt.busy.size) { Stt.hold(); if (Date.now() - Lock.hiddenAt > 5000) Object.entries(Stt.ctl).forEach(([id, c]) => { if (Stt.hid[id]) c.abort('restart'); }); } // the paused upload won't finish: send it again now
+    Stt.run();
+  }
   if (!document.hidden) Store.refresh();
 });
 
