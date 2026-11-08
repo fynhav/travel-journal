@@ -314,7 +314,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .mv{position:absolute;left:0;top:0;width:12px;height:12px;pointer-events:none;will-change:transform}.mv i{position:absolute;inset:0;border-radius:50%;background:#fff;border:2.5px solid var(--accent);box-sizing:border-box}.mv .ml{position:absolute;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:11px;line-height:1;background:rgba(255,253,248,.9);border-radius:8px;padding:3px 6px;box-shadow:0 1px 4px rgba(80,50,20,.15)}
 .via{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-2px 0 10px 4px}.vadd{border:0;background:none;color:var(--accent);font-weight:700;font-size:12.5px;padding:4px 6px;cursor:pointer}
 .vchip{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 2px 0 10px;border-radius:14px;background:#EFE7D6;font-size:13px;font-weight:600;color:#5C5043}.vchip button{border:0;background:none;font-size:17px;line-height:1;color:#8B7F70;padding:0 8px;cursor:pointer}
-.vin{display:flex;gap:6px;align-items:center;width:100%}.vin input{flex:1;min-width:0;padding:8px 12px}
+.vhint{flex:0 0 100%;color:var(--muted);font-size:12px;line-height:1.4;padding:0 4px 2px}.vin{display:flex;gap:6px;align-items:center;width:100%}.vin input{flex:1;min-width:0;padding:8px 12px}
 .wpn{display:flex;flex-direction:column;gap:8px;margin:2px 0 10px}.wpn input{padding:9px 12px}.hd .wl{position:absolute;left:40px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;background:rgba(255,253,248,.92);padding:3px 7px;border-radius:8px;white-space:nowrap;pointer-events:none}
 .g3s.pass i{width:16px;height:16px;margin:6px 0;border-width:2px;border-color:#A99A84;background:#fff;font-size:0}.g3s.pass.on i{background:#A99A84}.g3s.pass.cur i{box-shadow:0 0 0 5px rgba(181,86,47,.22)}.g3s.pass span{font-style:italic}
 #mapnote{position:absolute;left:12px;right:70px;top:12px;pointer-events:none}
@@ -394,7 +394,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.8'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.9'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1813,14 +1813,17 @@ function viaPlace(raw, c, cc) { // "Madrid, Spain" names the country; a plain na
 const viaHTML = (e, d) => {
   const vs = (e.via && e.via[d]) || [];
   const chips = vs.map((v, k) => `<span class="vchip">${ico('arrow', 13, 'currentColor', 2.2)}${esc(v)}<button data-act="via-del" data-d="${d}" data-k="${k}" aria-label="Remove ${esc(v)}">×</button></span>`).join('');
-  const add = S.viaOpen === d ? `<span class="vin"><input id="viaIn" list="placeList" placeholder="Where did you pass through? e.g. Madrid" enterkeyhint="done" autocomplete="off"><button class="btn small pri" data-act="via-ok" data-d="${d}">Add</button><button class="txtbtn" data-act="via-no">Cancel</button></span>` : `<button class="vadd" data-act="via-add" data-d="${d}">＋ Passed through</button>`;
-  return `<div class="via">${chips}${add}</div>`;
+  const first = d === chapters().reduce((m, x) => x.start < m ? x.start : m, '9999');
+  const add = S.viaOpen === d ? `<span class="vin"><input id="viaIn" list="placeList" placeholder="${first && !vs.length ? 'Where did you set off from? e.g. London' : 'Next place, in order. e.g. Madrid'}" enterkeyhint="next" autocomplete="off"><button class="btn small pri" data-act="via-ok" data-d="${d}">Add</button><button class="txtbtn" data-act="via-no">Done</button></span>` : `<button class="vadd" data-act="via-add" data-d="${d}">${first ? '＋ Set off from / passed through' : '＋ Passed through'}</button>`;
+  const hint = first && !vs.length && S.viaOpen !== d ? `<small class="vhint">Started somewhere else? Add where you set off from (e.g. London) and any layover (e.g. Madrid), in order. They show on the map and in 3D, but not on the calendar. Keep the day's own place as where you landed.</small>` : '';
+  return `<div class="via">${chips}${add}${hint}</div>`;
 };
 function tripStops() {
   const out = [];
   for (const e of chapters()) for (const d of range(e.start, e.end)) {
     const c = dayCountry(e, d) || e.countries[0] || '', cc = ccOf(c);
-    for (const v of (e.via && e.via[d]) || []) { const vp = (v || '').trim(); if (vp) { const vi = viaPlace(vp, c, cc); out.push({ place: vi.place, country: vi.country, cc: vi.cc, key: NORM(vi.place) + '|' + (vi.cc || NORM(vi.country)), start: d, end: d, days: 0, eid: e.id, eids: new Set([e.id]), pass: true }); } } // somewhere you passed through on the way here, without staying
+    const here = NORM(e.days[d]);
+    for (const v of (e.via && e.via[d]) || []) { const vp = (v || '').trim(); if (vp) { const vi = viaPlace(vp, c, cc); if (NORM(vi.place) === here) continue; out.push({ place: vi.place, country: vi.country, cc: vi.cc, key: NORM(vi.place) + '|' + (vi.cc || NORM(vi.country)), start: d, end: d, days: 0, eid: e.id, eids: new Set([e.id]), pass: true }); } } // somewhere you passed through on the way here, without staying
     const pl = (e.days[d] || '').trim(); if (!pl) continue;
     let pc = c, pcc = cc; // a place the list only knows in another country (London in a chapter set to Colombia) goes in its own country
     if (!gazLookup(pl, cc)) { const g = gazLookup(pl, ''); if (g && g.cc && g.n === NORM(pl)) { pcc = g.cc; pc = ccName(g.cc) || c; } }
@@ -2714,7 +2717,7 @@ document.addEventListener('click', async ev => {
     case 'map': flush(); S.mapFrom = S.view === 'entry' ? S.openId : ''; S.mapFocus = S.mapFrom; S.mapBack = S.view; S.view = 'map'; render(); scrollTo(0, 0); break;
     case 'via-add': S.viaOpen = t.dataset.d; rerender(); setTimeout(() => $('#viaIn')?.focus(), 40); break;
     case 'via-no': S.viaOpen = ''; rerender(); break;
-    case 'via-ok': { const v = ($('#viaIn')?.value || '').trim(); if (v && e) { e.via ||= {}; (e.via[t.dataset.d] ||= []).push(v); await saveEntry(e); } S.viaOpen = ''; rerender(); break; }
+    case 'via-ok': { const v = ($('#viaIn')?.value || '').trim(); if (v && e) { e.via ||= {}; (e.via[t.dataset.d] ||= []).push(v); await saveEntry(e); rerender(); setTimeout(() => $('#viaIn')?.focus(), 40); } else { S.viaOpen = ''; rerender(); } break; }
     case 'via-del': { const d = t.dataset.d; if (e && e.via && e.via[d]) { e.via[d].splice(+t.dataset.k, 1); if (!e.via[d].length) delete e.via[d]; await saveEntry(e); } rerender(); break; }
     case 're-name': { const r = REdit.R(); REdit.names(r)[REdit.selWp] = t.dataset.n; await REdit.save(false); break; }
     case 'g3-open': G3.open(); break;
