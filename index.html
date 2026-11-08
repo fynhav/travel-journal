@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.18'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.19'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2599,7 +2599,7 @@ const G3 = {
     let a = 0; const pushA = u => { a = Math.max(a, c.angleTo(u)); }; P.forEach(p => pushA(this.v3(p.ll[0], p.ll[1]))); this.legs.forEach(l => l.parts.forEach(p => p.U.forEach((u, k) => { if (k % 6 === 0) pushA(u); })));
     const [la, lo] = this.ll(c); this.ov = { lat: la, lon: lo, dist: 1 + Math.max(.3, Math.min(2.6, .32 + 2.5 * a)), tilt: 8 };
   },
-  followDist(lg) { return 1 + Math.max(.055, Math.min(.85, .04 + 3.4 * lg.len)); }, // short hops zoom right in, long flights zoom out
+  followDist(lg) { return 1 + Math.max(.004, Math.min(.85, .04 + 3.4 * lg.len, 6 * lg.len + .003)); }, // short hops (a few km) zoom right in, long flights zoom out
   resize() {
     const b = $('#g3box'); if (!b || !this.rd) return; const w = b.clientWidth, h = b.clientHeight; if (!w || !h) return;
     this.W = w; this.H = h; this.rd.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); this.rd.setSize(w, h, false); this.cam.aspect = w / h; this.cam.updateProjectionMatrix();
@@ -2638,10 +2638,11 @@ const G3 = {
     // camera: smooth towards where it should be
     const c = this.cur, g = this.tgt;
     if (!this.free) {
-      if (this.mode === 'follow' && s) { const [la, lo] = this.ll(s.pos); g.lat = la; g.lon = lo; g.dist = this.followDist(s.lg); g.tilt = 12; }
+      if (this.mode === 'follow' && s) { const [la, lo] = this.ll(s.pos); g.lat = la; g.lon = lo; g.dist = this.followDist(s.lg); g.tilt = 12 * Math.max(0, Math.min(1, (g.dist - 1 - .05) / .15)); }  // close-ups look straight down, wide views tilt
       else if (this.ov) { g.lat = this.ov.lat; g.lon = this.ov.lon; g.dist = this.ov.dist; g.tilt = this.ov.tilt; }
       const k = 1 - Math.exp(-dt * (this.mode === 'follow' ? 5 : 3.2)); let dl = g.lon - c.lon; dl = ((dl + 540) % 360) - 180;
-      c.lat += (g.lat - c.lat) * k; c.lon += dl * k; c.dist += (g.dist - c.dist) * k; c.tilt += (g.tilt - c.tilt) * k;
+      const d0 = Math.max(1e-4, c.dist - 1), d1 = Math.max(1e-4, g.dist - 1);
+      c.lat += (g.lat - c.lat) * k; c.lon += dl * k; c.dist = 1 + d0 * Math.pow(d1 / d0, k); c.tilt += (g.tilt - c.tilt) * k; // zoom glides in log-space, so a big jump in scale feels even
     }
     c.lon = ((c.lon + 540) % 360) - 180; c.lat = Math.max(-80, Math.min(80, c.lat));
     const cam = this.cam, tl = Math.max(-85, Math.min(85, c.lat - c.tilt));
@@ -2660,7 +2661,7 @@ const G3 = {
     let vx = -1e4, vy = -1e4, vr = 0;
     if (this.st && this.veh) {
       const vp = this.veh.position, vv = vp.clone().project(this.cam);
-      if (vv.z < 1 && vp.clone().normalize().dot(ch) > 1 / cd) { vx = (vv.x * .5 + .5) * W; vy = (-vv.y * .5 + .5) * H; const vl = Math.min(.04, (this.cur.dist - 1) * .09 + .006), px = H * vl / (2 * cp.distanceTo(vp) * Math.tan(THREE.MathUtils.degToRad(20))); vr = Math.max(16, Math.min(110, px * .6 + 12)); }
+      if (vv.z < 1 && vp.clone().normalize().dot(ch) > 1 / cd) { vx = (vv.x * .5 + .5) * W; vy = (-vv.y * .5 + .5) * H; const vl = Math.max(.0004, Math.min(.04, (this.cur.dist - 1) * .045)), px = H * vl / (2 * cp.distanceTo(vp) * Math.tan(THREE.MathUtils.degToRad(20))); vr = Math.max(16, Math.min(110, px * .6 + 12)); }
     }
     const order = els.map((_, k) => k).sort((a, b) => pr(b) - pr(a) || ((this.pl[b].st ? this.pl[b].st.days : 0) - (this.pl[a].st ? this.pl[a].st.days : 0)));
     for (const k of order) {
@@ -2726,17 +2727,17 @@ const G3 = {
   },
   // ----- touch: drag to turn the globe, pinch to zoom -----
   bind(cv) {
-    const mv = (dx, dy) => { const c = this.cur, k = Math.max(.05, (c.dist - 1)) * .22; this.free = true; c.lon -= dx * k; c.lat += dy * k; this.tgt = { ...c }; };
+    const mv = (dx, dy) => { const c = this.cur, k = Math.max(.002, (c.dist - 1)) * .22; this.free = true; c.lon -= dx * k; c.lat += dy * k; this.tgt = { ...c }; };
     cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); this.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
     cv.addEventListener('pointermove', e => {
       const p = this.ptr.get(e.pointerId); if (!p) return;
       if (this.ptr.size === 1) { mv(e.clientX - p.x, e.clientY - p.y); this.sig = ''; }
-      else if (this.ptr.size === 2) { const o = [...this.ptr.entries()].find(([id]) => id !== e.pointerId)[1], d0 = Math.hypot(p.x - o.x, p.y - o.y), d1 = Math.hypot(e.clientX - o.x, e.clientY - o.y); if (d0 > 0) { this.free = true; this.cur.dist = Math.max(1.025, Math.min(4.5, 1 + (this.cur.dist - 1) * d0 / d1)); this.tgt = { ...this.cur }; this.sig = ''; } }
+      else if (this.ptr.size === 2) { const o = [...this.ptr.entries()].find(([id]) => id !== e.pointerId)[1], d0 = Math.hypot(p.x - o.x, p.y - o.y), d1 = Math.hypot(e.clientX - o.x, e.clientY - o.y); if (d0 > 0) { this.free = true; this.cur.dist = Math.max(1.003, Math.min(4.5, 1 + (this.cur.dist - 1) * d0 / d1)); this.tgt = { ...this.cur }; this.sig = ''; } }
       p.x = e.clientX; p.y = e.clientY;
     });
     const up = e => { this.ptr.delete(e.pointerId); };
     cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-    cv.addEventListener('wheel', e => { e.preventDefault(); this.free = true; this.cur.dist = Math.max(1.025, Math.min(4.5, 1 + (this.cur.dist - 1) * Math.exp(e.deltaY * .0012))); this.tgt = { ...this.cur }; this.sig = ''; }, { passive: false });
+    cv.addEventListener('wheel', e => { e.preventDefault(); this.free = true; this.cur.dist = Math.max(1.003, Math.min(4.5, 1 + (this.cur.dist - 1) * Math.exp(e.deltaY * .0012))); this.tgt = { ...this.cur }; this.sig = ''; }, { passive: false });
     cv.addEventListener('webglcontextlost', e => { e.preventDefault(); this.close(); toast('The 3D view stopped. Open it again'); });
   },
   async open() {
