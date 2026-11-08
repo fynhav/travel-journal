@@ -255,7 +255,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .g3hd{display:flex;align-items:center;gap:10px}.g3hd b{display:block;font:600 18px/1.2 var(--serif);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.g3hd small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 .g3sp{height:42px;min-width:52px;border-radius:21px;border:1.5px solid #E6D9C3;background:#FFFDF8;font-weight:800;font-size:13.5px;color:var(--ink);cursor:pointer;padding:0 12px}
 .g3play{background:var(--accent);border-color:var(--accent);color:#fff}
-.g3steps{display:flex;align-items:flex-start;overflow-x:auto;margin:12px -16px 12px;padding:2px 16px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.g3steps::-webkit-scrollbar{display:none}
+.g3steps{touch-action:pan-x;overscroll-behavior-x:contain;display:flex;align-items:flex-start;overflow-x:auto;margin:12px -16px 12px;padding:2px 16px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}.g3steps::-webkit-scrollbar{display:none}
 .g3s{flex:none;width:64px;border:0;background:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;color:var(--ink)}
 .g3s i{width:28px;height:28px;border-radius:50%;box-sizing:border-box;border:2px solid #E7C9B6;background:#fff;color:var(--accent);font:800 12px/24px var(--serif,inherit);font-style:normal;text-align:center}
 .g3s.on i{background:var(--accent);border-color:var(--accent);color:#fff}.g3s.cur i{box-shadow:0 0 0 5px rgba(181,86,47,.22)}
@@ -394,7 +394,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.6'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.7'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1803,17 +1803,24 @@ const PS = 100, mx = lo => lo * PS, my = la => { const r = Math.max(-80, Math.mi
 const unproj = (x, y) => [(2 * Math.atan(Math.exp(-y / PS * Math.PI / 180)) - Math.PI / 2) * 180 / Math.PI, x / PS];
 const hav = (a, b) => { const R = 6371, t = Math.PI / 180, dLa = (b[0] - a[0]) * t, dLo = (b[1] - a[1]) * t, h = Math.sin(dLa / 2) ** 2 + Math.cos(a[0] * t) * Math.cos(b[0] * t) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
 
+const ccName = cc => { const k = Object.keys(CODES).find(x => CODES[x] === cc); return k ? k.replace(/\b\w/g, m => m.toUpperCase()) : ''; };
+function viaPlace(raw, c, cc) { // "Madrid, Spain" names the country; a plain name is looked up in this chapter's country first, then everywhere
+  let place = (raw || '').trim(), country = c, code = cc; const m = place.match(/^(.*\S)\s*,\s*([^,]+)$/);
+  if (m && ccOf(m[2])) { place = m[1]; code = ccOf(m[2]); country = ccName(code) || m[2].trim(); }
+  else if (!gazLookup(place, cc)) { const g = gazLookup(place, ''); if (g && g.cc) { code = g.cc; country = ccName(g.cc) || c; } }
+  return { place, country, cc: code };
+}
 const viaHTML = (e, d) => {
   const vs = (e.via && e.via[d]) || [];
   const chips = vs.map((v, k) => `<span class="vchip">${ico('arrow', 13, 'currentColor', 2.2)}${esc(v)}<button data-act="via-del" data-d="${d}" data-k="${k}" aria-label="Remove ${esc(v)}">×</button></span>`).join('');
-  const add = S.viaOpen === d ? `<span class="vin"><input id="viaIn" list="placeList" placeholder="Where did you pass through?" enterkeyhint="done" autocomplete="off"><button class="btn small pri" data-act="via-ok" data-d="${d}">Add</button><button class="txtbtn" data-act="via-no">Cancel</button></span>` : `<button class="vadd" data-act="via-add" data-d="${d}">＋ Passed through</button>`;
+  const add = S.viaOpen === d ? `<span class="vin"><input id="viaIn" list="placeList" placeholder="Where did you pass through? e.g. Madrid" enterkeyhint="done" autocomplete="off"><button class="btn small pri" data-act="via-ok" data-d="${d}">Add</button><button class="txtbtn" data-act="via-no">Cancel</button></span>` : `<button class="vadd" data-act="via-add" data-d="${d}">＋ Passed through</button>`;
   return `<div class="via">${chips}${add}</div>`;
 };
 function tripStops() {
   const out = [];
   for (const e of chapters()) for (const d of range(e.start, e.end)) {
     const c = dayCountry(e, d) || e.countries[0] || '', cc = ccOf(c);
-    for (const v of (e.via && e.via[d]) || []) { const vp = (v || '').trim(); if (vp) out.push({ place: vp, country: c, cc, key: NORM(vp) + '|' + (cc || NORM(c)), start: d, end: d, days: 0, eid: e.id, eids: new Set([e.id]), pass: true }); } // somewhere you passed through on the way here, without staying
+    for (const v of (e.via && e.via[d]) || []) { const vp = (v || '').trim(); if (vp) { const vi = viaPlace(vp, c, cc); out.push({ place: vi.place, country: vi.country, cc: vi.cc, key: NORM(vi.place) + '|' + (vi.cc || NORM(vi.country)), start: d, end: d, days: 0, eid: e.id, eids: new Set([e.id]), pass: true }); } } // somewhere you passed through on the way here, without staying
     const pl = (e.days[d] || '').trim(); if (!pl) continue;
     const key = NORM(pl) + '|' + (cc || NORM(c)), last = out[out.length - 1];
     if (last && !last.pass && last.key === key) { last.end = d; last.days++; last.eids.add(e.id); }
@@ -2102,7 +2109,7 @@ const MapV = {
   panel() {
     const c = $('#mapcard'); if (!c) return;
     const P = this.pts, A = this.all, miss = this.missing();
-    const RS = A.filter(x => !x.pass), ccs = new Set(A.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
+    const RS = A.filter(x => !x.pass), ccs = new Set(RS.map(x => x.cc || x.country)), days = A.reduce((n, x) => n + x.days, 0);
     let km = 0; for (let i = 1; i < P.length; i++) km += this.legKm(i);
     const stats = `<div class="mstats"><div><b>${RS.length}</b><span>stop${RS.length === 1 ? '' : 's'}</span></div><div><b>${ccs.size}</b><span>countr${ccs.size === 1 ? 'y' : 'ies'}</span></div><div><b>${days}</b><span>day${days === 1 ? '' : 's'}</span></div><div><b>${km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)}</b><span>km, roughly</span></div></div>`;
     if (!P.length) { c.innerHTML = `${stats}<p class="hint" style="margin:10px 0 0">${A.length ? 'None of your places are on the map yet. Tap “Place them” above to find or drop them.' : 'Add a place to a day in a chapter and it shows up here.'}</p>`; this.note(miss); return; }
@@ -2599,22 +2606,29 @@ const G3 = {
   },
   paintCard(force) {
     const c = $('#g3card'); if (!c) return; const M = MapV, L = this.st ? this.st.L : 0, n = M.pts.length;
-    const reachedN = !this.legs.length ? 0 : this.legs.reduce((k, l, j) => this.t >= l.start + l.dur - this.DW ? j + 1 : k, 0) + (this.t >= this.LEAD ? 0 : 0);
-    const ms = this.st ? this.st.P.m : 'fly', sig = [L, ms, reachedN, this.playing, this.speed, this.mode, this.free, this.t >= this.total].join();
-    if (!force && sig === this.sig) return; const first = !c.firstChild || force && !$('#g3steps'); this.sig = sig;
-    if (!this.legs.length) { c.innerHTML = `<div class="g3hd"><div><b>${esc(M.pts[0].place)}</b><small>Add another place to a chapter and the trip will travel between them.</small></div></div>`; return; }
-    const lg = this.legs[L], a = M.pts[lg.i - 1], b = M.pts[lg.i], done = this.t >= this.total, vv = [...new Set(lg.parts.map(q => q.m))];
+    if (!this.legs.length) { if (!c.querySelector('.g3hd b#g3only')) c.innerHTML = `<div class="g3hd"><div><b id="g3only">${esc(M.pts[0].place)}</b><small>Add another place to a chapter and the trip will travel between them.</small></div></div>`; return; }
+    const reachedN = this.legs.reduce((k, l, j) => this.t >= l.start + l.dur - this.DW ? j + 1 : k, 0);
+    const ms = this.st ? this.st.P.m : 'fly', done = this.t >= this.total, sig = [L, ms, reachedN, this.playing, this.speed, this.mode, this.free, done].join();
+    const built = !!$('#g3steps'); if (!force && built && sig === this.sig) return; this.sig = sig;
+    const lg = this.legs[L], a = M.pts[lg.i - 1], b = M.pts[lg.i], vv = [...new Set(lg.parts.map(q => q.m))];
     const km = Math.round(lg.km), kmT = km >= 100 ? Math.round(km / 10) * 10 : km;
     const rr = M.leg(lg.i), nm = j => (rr && rr.wn && rr.wn[j]) || '', names = ((rr && rr.wn) || []).filter(Boolean);
     const what = vv.length > 1 ? lg.parts.map((q, k) => { const v = this.verb(q.m)[1]; return (k ? v.toLowerCase() : v) + (k < lg.parts.length - 1 && nm(k) ? ' to ' + esc(nm(k)) : ''); }).join(', then ') : this.verb(vv[0])[1] + (names.length ? ' via ' + names.map(esc).join(', ') : '');
+    // the card is built once and then only updated, so a swipe along the stops is never interrupted
+    if (!built) {
+      c.innerHTML = `<div class="g3hd"><div style="min-width:0;flex:1"><b id="g3t"></b><small id="g3w"></small></div><button class="g3sp" data-act="g3-speed" id="g3sp"></button><button class="cbtn g3play" data-act="g3-play" id="g3pl"></button></div>
+        <div class="g3steps" id="g3steps">${this.stepsHTML()}</div>
+        <div class="mseg g3seg"><button data-act="g3-mode" data-m="follow" id="g3mf">Follow</button><button data-act="g3-mode" data-m="whole" id="g3mw">Whole trip</button></div>`;
+      const st = $('#g3steps'); ['pointerdown', 'touchstart', 'touchmove', 'wheel'].forEach(ev => st.addEventListener(ev, () => { this.lastTouch = Date.now(); }, { passive: true })); this.centred = -1;
+    }
+    $('#g3t').textContent = `${a.place} → ${b.place}`; $('#g3w').innerHTML = `${what} · about ${kmT} km`;
+    $('#g3sp').textContent = this.speed + '×'; const pl = $('#g3pl'); pl.innerHTML = done ? ico('fit', 18) : ico(this.playing ? 'pause' : 'play', 20, 'currentColor', 2.2); pl.setAttribute('aria-label', this.playing ? 'Pause' : done ? 'Play again' : 'Play');
+    $('#g3mf').classList.toggle('on', this.mode === 'follow' && !this.free); $('#g3mw').classList.toggle('on', this.mode === 'whole' && !this.free);
     const chip = $('#g3chip'); if (chip) chip.innerHTML = `<span>${done ? 'Trip finished' : this.verb(ms)[0] + ' to ' + esc(b.place)}</span><small>${done ? n + ' stops' : 'leg ' + (L + 1) + ' of ' + (n - 1)}</small>`;
-    const old = $('#g3steps'), sl = old ? old.scrollLeft : 0;
-    c.innerHTML = `<div class="g3hd"><div style="min-width:0;flex:1"><b>${esc(a.place)} → ${esc(b.place)}</b><small>${what} · about ${kmT} km</small></div><button class="g3sp" data-act="g3-speed" aria-label="Speed">${this.speed}×</button><button class="cbtn g3play" data-act="g3-play" aria-label="${this.playing ? 'Pause' : done ? 'Play again' : 'Play'}">${done ? ico('fit', 18) : ico(this.playing ? 'pause' : 'play', 20, 'currentColor', 2.2)}</button></div>
-      <div class="g3steps" id="g3steps">${this.stepsHTML()}</div>
-      <div class="mseg g3seg"><button data-act="g3-mode" data-m="follow" class="${this.mode === 'follow' && !this.free ? 'on' : ''}">Follow</button><button data-act="g3-mode" data-m="whole" class="${this.mode === 'whole' && !this.free ? 'on' : ''}">Whole trip</button></div>`;
-    const st = $('#g3steps'); st.scrollLeft = sl;
+    const st = $('#g3steps');
     $$('#g3steps [data-n]').forEach(el => { const j = +el.dataset.n, isStop = el.classList.contains('g3s'); el.classList.toggle('on', isStop ? j <= reachedN : j < reachedN); el.classList.toggle('cur', isStop ? j === L + 1 : j === L); });
-    const cur = $(`#g3steps .g3s[data-n="${Math.min(L + 1, n - 1)}"]`); if (cur) st.scrollTo({ left: cur.offsetLeft - st.clientWidth / 2 + cur.offsetWidth / 2, behavior: first ? 'auto' : 'smooth' });
+    const ci = Math.min(L + 1, n - 1), cur = $(`#g3steps .g3s[data-n="${ci}"]`);
+    if (cur && this.centred !== ci && Date.now() - (this.lastTouch || 0) > 4000) { this.centred = ci; st.scrollTo({ left: cur.offsetLeft - st.clientWidth / 2 + cur.offsetWidth / 2, behavior: 'smooth' }); }
   },
   jump(i) { // go to the start of the trip into stop i
     if (!this.legs.length) return; const lg = this.legs[Math.max(0, Math.min(this.legs.length - 1, i - 1))];
