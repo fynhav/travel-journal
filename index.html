@@ -291,9 +291,9 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .mlh{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;min-width:0}
 .mlh span{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mlh small{font-size:12px;color:var(--muted);line-height:1.35}
-.mseg{display:flex;gap:8px}
+.mseg{display:flex;gap:6px}
 .mvia{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-.mseg button{flex:1;height:40px;border-radius:20px;border:1.5px solid #E6D9C3;background:#FFFDF8;color:var(--ink,#3a3128);font-weight:600;font-size:13.5px;cursor:pointer}
+.mseg button{flex:1;height:40px;border-radius:20px;border:1.5px solid #E6D9C3;background:#FFFDF8;color:var(--ink,#3a3128);font-weight:600;font-size:13px;padding:0 4px;white-space:nowrap;cursor:pointer}
 .mseg button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 #mappins{position:absolute;inset:0;pointer-events:none}
 .mp{position:absolute;left:0;top:0;width:28px;height:28px;border:0;background:none;padding:0;pointer-events:auto;cursor:pointer;will-change:transform}
@@ -395,7 +395,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.12'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.13'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1894,7 +1894,8 @@ async function roadRoute(a, b, via = []) {
   for (const t of tries) { try { return await t(); } catch (e) { errs.push(String(e && e.message || e).slice(0, 40)); } }
   throw new Error(errs.join(', '));
 }
-const MODES = { road: ['🚗', 'Drove'], sail: ['⛵', 'Sailed'], fly: ['✈︎', 'Flew'] };
+const MODES = { road: ['🚗', 'Drove'], bus: ['🚌', 'Bus'], sail: ['⛵', 'Sailed'], fly: ['✈︎', 'Flew'] };
+const pk = q => q.m === 'road' && q.bus ? 'bus' : q.m; // a bus part is a road part flagged bus, so it follows the same road routing
 const proj = ll => [mx(ll[1]), my(ll[0])];
 const ll4 = q => { const [la, lo] = unproj(q[0], q[1]); return [+la.toFixed(4), +lo.toFixed(4)]; };
 const thirds = (p, q) => [[p[0] + (q[0] - p[0]) / 3, p[1] + (q[1] - p[1]) / 3], [p[0] + (q[0] - p[0]) * 2 / 3, p[1] + (q[1] - p[1]) * 2 / 3]];
@@ -2017,7 +2018,11 @@ const MapV = {
   // A leg is one or more parts (drove, sailed or flew) joined at points you can move; a part by road follows the real route,
   // a part by sea or air is a line you can bend with two handles. Old records (one mode per leg) are upgraded as they are read.
   lk(i) { return 'leg:' + this.pts[i - 1].key + '>' + this.pts[i].key; },
-  mk(m, old) { return m === 'road' ? (old && old.m === 'road' ? { ...old, none: 0, redo: 1 } : { m, redo: 1 }) : { m, ...(old && old.h ? { h: old.h } : {}) }; },
+  mk(m, old) {
+    if (m === 'bus') return old && old.m === 'road' ? (old.p && !old.redo ? { ...old, bus: 1 } : { ...old, bus: 1, none: 0, redo: 1 }) : { m: 'road', bus: 1, redo: 1 };
+    if (m === 'road') { if (old && old.m === 'road') { const { bus, ...o } = old; return old.bus && o.p && !o.redo ? o : { ...o, none: 0, redo: 1 }; } return { m, redo: 1 }; }
+    return { m, ...(old && old.h ? { h: old.h } : {}) };
+  },
   leg(i) {
     const k = this.lk(i), a = this.pts[i - 1].ll, b = this.pts[i].ll; let r = Vault.geo && Vault.geo[k]; if (!r) return null;
     if (r.v !== 3) {
@@ -2066,23 +2071,23 @@ const MapV = {
   },
   legRow() {
     const i = this.idx; if (i < 1 || !this.pts[i]) return '';
-    const r = this.leg(i), a = this.pts[i - 1], ms = r ? [...new Set(r.parts.map(q => q.m))] : [], one = ms.length === 1 ? ms[0] : '';
+    const r = this.leg(i), a = this.pts[i - 1], ms = r ? [...new Set(r.parts.map(pk))] : [], one = ms.length === 1 ? ms[0] : '';
     let st = 'Straight line. Choose how you got here.';
     if (r) {
       const km = Math.round(this.legKm(i)), roads = r.parts.filter(q => q.m === 'road');
-      if (ms.length > 1) st = `A mix: ${r.parts.map((q, k) => MODES[q.m].join(' ') + (k < r.wp.length && r.wn && r.wn[k] ? ' to ' + esc(r.wn[k]) : '')).join(', then ')} · about ${km} km.`;
-      else if (one === 'road') st = roads.some(q => q.none) ? 'No road route found, so it stays a straight line.' : roads.every(q => q.p) ? `Following the main roads · ${km} km. Tap Drove again to redo it.` : navigator.onLine ? (this.lastErr ? `Couldn’t get the route (${esc(this.lastErr)}). Tap Drove to try again.` : 'Finding the road route…') : 'The route is drawn when you next have signal.';
+      if (ms.length > 1) st = `A mix: ${r.parts.map((q, k) => MODES[pk(q)].join(' ') + (k < r.wp.length && r.wn && r.wn[k] ? ' to ' + esc(r.wn[k]) : '')).join(', then ')} · about ${km} km.`;
+      else if (one === 'road' || one === 'bus') st = roads.some(q => q.none) ? 'No road route found, so it stays a straight line.' : roads.every(q => q.p) ? `${one === 'bus' ? 'By bus' : 'Following the main roads'} · ${km} km. Tap ${one === 'bus' ? 'Bus' : 'Drove'} again to redo the road.` : navigator.onLine ? (this.lastErr ? `Couldn’t get the route (${esc(this.lastErr)}). Tap ${one === 'bus' ? 'Bus' : 'Drove'} to try again.` : 'Finding the road route…') : 'The route is drawn when you next have signal.';
       else if (one === 'sail') st = `Sailed · about ${km} km. Bend it or add points with Edit route.`;
       else st = r.wp.length || r.parts.some(q => q.h) ? `Flew · about ${km} km.` : 'Straight line, like a flight.';
     }
     const b = m => `<button data-act="leg" data-m="${m}" class="${one === m ? 'on' : ''}">${MODES[m].join(' ')}</button>`;
-    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg">${b('fly')}${b('road')}${b('sail')}</div><div class="mvia"><button class="btn small" data-act="re-open">✎ Edit route on a map</button></div></div>`;
+    return `<div class="mleg"><div class="mlh"><span>How you got here from ${esc(a.place)}</span><small>${st}</small></div><div class="mseg">${b('fly')}${b('road')}${b('bus')}${b('sail')}</div><div class="mvia"><button class="btn small" data-act="re-open">✎ Edit route on a map</button></div></div>`;
   },
   async setLeg(m) {
     const i = this.idx; if (i < 1 || !this.pts[i]) return;
-    const r = this.ensure(i); r.parts = r.parts.map(q => q.m === m ? (m === 'road' ? this.mk(m, q) : q) : this.mk(m, q));
+    const r = this.ensure(i); r.parts = r.parts.map(q => pk(q) === m ? (m === 'road' || m === 'bus' ? this.mk(m, q) : q) : this.mk(m, q));
     await Vault.saveGeo(); this.build(); this.update(); this.panel();
-    if (m === 'road') { if (navigator.onLine) this.fetchPending(); else toast('Saved. The road route is drawn when you have signal'); }
+    if (m === 'road' || m === 'bus') { if (navigator.onLine) this.fetchPending(); else toast('Saved. The road route is drawn when you have signal'); }
   },
   anyNeeds() { for (let i = 1; i < this.pts.length; i++) if (this.needs(i)) return true; return false; },
   async fetchPending() {
@@ -2228,11 +2233,11 @@ const REdit = {
   live() { if (this.open) { this.bar(); this.draw(); } },
   bar() {
     const el = $('#rebar'); if (!el) return; const r = this.R(), q = r.parts[this.sel], n = r.parts.length, curve = q.m !== 'road';
-    const chips = r.parts.map((p, k) => `<button class="rchip${k === this.sel ? ' on' : ''}" data-act="re-part" data-k="${k}">${n > 1 ? (k + 1) + '. ' : ''}${MODES[p.m].join(' ')}</button>`).join('');
-    const mode = m => `<button data-act="re-mode" data-m="${m}" class="${q.m === m ? 'on' : ''}">${MODES[m].join(' ')}</button>`;
+    const chips = r.parts.map((p, k) => `<button class="rchip${k === this.sel ? ' on' : ''}" data-act="re-part" data-k="${k}">${n > 1 ? (k + 1) + '. ' : ''}${MODES[pk(p)].join(' ')}</button>`).join('');
+    const mode = m => `<button data-act="re-mode" data-m="${m}" class="${pk(q) === m ? 'on' : ''}">${MODES[m].join(' ')}</button>`;
     let hint = this.note;
     if (!hint) hint = curve ? 'Drag the two white dots to bend this part.' : q.none ? 'No road found for this part, so it stays a straight line.' : q.p && !q.redo ? 'Following the main roads. Drag a numbered point to steer the road through it.' : navigator.onLine ? (MapV.lastErr ? 'Couldn’t get the road yet. It will try again.' : 'Finding the road route…') : 'The road is drawn when you next have signal.';
-    el.innerHTML = `${n > 1 ? `<div class="rechips">${chips}</div>` : ''}<div class="mseg">${mode('fly')}${mode('road')}${mode('sail')}</div>
+    el.innerHTML = `${n > 1 ? `<div class="rechips">${chips}</div>` : ''}<div class="mseg">${mode('fly')}${mode('road')}${mode('bus')}${mode('sail')}</div>
       <p class="rh">${hint}</p>
       ${this.selWp >= 0 ? this.nameBox(r) : ''}
       <div class="btns"><button class="btn small" data-act="re-add">＋ Add a point</button><button class="btn small" data-act="re-rm"${this.selWp < 0 ? ' disabled' : ''}>Remove point</button>${curve && q.h ? '<button class="btn small" data-act="re-straight">Straighten</button>' : ''}</div>
@@ -2268,7 +2273,7 @@ const REdit = {
   },
   async mode(m) {
     const r = this.R(), q = r.parts[this.sel]; this.note = '';
-    r.parts[this.sel] = MapV.mk(m, q); await this.save(m === 'road');
+    r.parts[this.sel] = MapV.mk(m, q); await this.save(m === 'road' || m === 'bus');
   },
   async add() {
     const M = MapV, r = this.R(), k = this.sel, q = r.parts[k], A = this.A(), p = A[k], n = A[k + 1]; let mid, L, Rt;
@@ -2276,7 +2281,7 @@ const REdit = {
     if (pts.length >= 3) { // split the real road at about half way, so nothing has to be fetched again
       const seg = pts.slice(1).map((z, j) => hav(pts[j], z)), tot = seg.reduce((x, y) => x + y, 0); let acc = 0, j = 0; while (j < seg.length - 1 && acc + seg[j] < tot / 2) acc += seg[j++];
       const m = Math.max(1, Math.min(pts.length - 2, j + 1)), left = seg.slice(0, m).reduce((x, y) => x + y, 0), fl = z => z.flatMap(c => c);
-      mid = pts[m]; L = { m: 'road', km: Math.round((q.km || 0) * left / (tot || 1)) }; Rt = { m: 'road', km: Math.max(0, (q.km || 0) - L.km) }; M.setP(L, fl(pts.slice(0, m + 1))); M.setP(Rt, fl(pts.slice(m)));
+      mid = pts[m]; L = { m: 'road', ...(q.bus ? { bus: 1 } : {}), km: Math.round((q.km || 0) * left / (tot || 1)) }; Rt = { m: 'road', ...(q.bus ? { bus: 1 } : {}), km: Math.max(0, (q.km || 0) - L.km) }; M.setP(L, fl(pts.slice(0, m + 1))); M.setP(Rt, fl(pts.slice(m)));
     } else if (q.h && q.m !== 'road') { // split the curve in two without changing its shape
       const c = partCtl(A, k, q), mi = (u, w) => [(u[0] + w[0]) / 2, (u[1] + w[1]) / 2], Q0 = mi(p, c[0]), Q1 = mi(c[0], c[1]), Q2 = mi(c[1], n), R0 = mi(Q0, Q1), R1 = mi(Q1, Q2), S = mi(R0, R1);
       mid = ll4(S); L = { m: q.m, h: [...ll4(Q0), ...ll4(R0)] }; Rt = { m: q.m, h: [...ll4(R1), ...ll4(Q2)] };
@@ -2287,7 +2292,7 @@ const REdit = {
   },
   async remove() {
     const j = this.selWp; if (j < 0) return; const r = this.R(), L = r.parts[j], Rt = r.parts[j + 1]; let m;
-    if (L.m === 'road' && Rt.m === 'road') m = { m: 'road', redo: 1 };
+    if (L.m === 'road' && Rt.m === 'road') m = { m: 'road', redo: 1, ...(L.bus && Rt.bus ? { bus: 1 } : {}) };
     else m = { m: L.m, ...(L.m !== 'road' && L.h && Rt.h && Rt.m === L.m ? { h: [L.h[0], L.h[1], Rt.h[2], Rt.h[3]] } : {}) };
     this.names(r).splice(j, 1); r.wp.splice(j, 1); r.parts.splice(j, 2, m); this.sel = j; this.selWp = -1; this.note = '';
     await this.save(m.m === 'road');
@@ -2375,17 +2380,17 @@ const G3 = {
         const c = partCtl(A, k, q); pts = [];
         for (let s = 0; s <= 40; s++) { const t = s / 40, u = 1 - t, f = j => u * u * u * A[k][j] + 3 * u * u * t * c[0][j] + 3 * u * t * t * c[1][j] + t * t * t * A[k + 1][j]; pts.push(unproj(f(0), f(1))); }
       } else pts = this.gc(L[k], L[k + 1]);
-      return { m: q.m, pts };
+      return { m: q.m, bus: q.bus ? 1 : 0, pts };
     });
   },
   RAD: { road: 1.0016, sail: 1.0012, fly: 1.0016 },
   // one part of a leg: unit vectors, distance along it, and how high above the ground it is at each fraction
-  mkPart(m, pts) {
+  mkPart(m, pts, bus) {
     const U = []; for (const p of pts) { const u = this.v3(p[0], p[1]); if (!U.length || u.distanceTo(U[U.length - 1]) > 1e-6) U.push(u); }
     if (U.length < 2) U.push(U[0].clone().add(new THREE.Vector3(1e-5, 0, 0)).normalize());
     const cum = [0]; for (let k = 1; k < U.length; k++) cum.push(cum[k - 1] + U[k].angleTo(U[k - 1]));
     const len = cum[cum.length - 1] || 1e-6, H = m === 'fly' ? Math.min(.05, .01 + .35 * len) : 0;
-    return { m, U, cum, len, H };
+    return { m, bus: bus ? 1 : 0, U, cum, len, H };
   },
   alt(P, f) { return P.m === 'fly' ? P.H * Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, f))), .8) : 0; },
   at(P, f) { // unit vector and radius at a fraction of the part
@@ -2398,7 +2403,7 @@ const G3 = {
   build() {
     const M = MapV, legs = []; let t = this.LEAD;
     for (let i = 1; i < M.pts.length; i++) {
-      const parts = this.sample(i).map(q => this.mkPart(q.m, q.pts)), len = parts.reduce((n, p) => n + p.len, 0), km = M.legKm(i);
+      const parts = this.sample(i).map(q => this.mkPart(q.m, q.pts, q.bus)), len = parts.reduce((n, p) => n + p.len, 0), km = M.legKm(i);
       const dur = 3 + 2.2 * Math.log(1 + km / 40) + this.DW;
       let c = 0; parts.forEach(p => { p.f0 = c / len; c += p.len; p.f1 = c / len; });
       legs.push({ i, parts, len, km, dur, start: t }); t += dur;
@@ -2468,7 +2473,14 @@ const G3 = {
     boat.add(mesh(new T.CylinderGeometry(.025, .025, 1.4, 8), dark, 0, .84, .14));
     const sailG = new T.ShapeGeometry(new T.Shape().moveTo(0, 0).lineTo(0, 1.2).lineTo(.72, .06).lineTo(0, 0)), sail = mesh(sailG, mat(0xFFFDF8, { side: T.DoubleSide }), 0, .2, .12); sail.rotation.y = Math.PI / 2; boat.add(sail);
     const jibG = new T.ShapeGeometry(new T.Shape().moveTo(0, 0).lineTo(0, 1.0).lineTo(-.5, .06).lineTo(0, 0)), jib = mesh(jibG, mat(0xF3D9C6, { side: T.DoubleSide }), 0, .2, .16); jib.rotation.y = Math.PI / 2; boat.add(jib);
-    return { fly: plane, road: car, sail: boat };
+    // bus: long, tall body, window strip, front along +z
+    const bus = new T.Group();
+    bus.add(mesh(new T.BoxGeometry(.78, .5, 2.3), terra, 0, .16, 0));
+    bus.add(mesh(new T.BoxGeometry(.8, .17, 2.0), glass, 0, .3, -.06));
+    bus.add(mesh(new T.BoxGeometry(.8, .17, .04), glass, 0, .3, 1.16));
+    bus.add(mesh(new T.BoxGeometry(.7, .04, 2.1), cream, 0, .43, 0));
+    for (const sx of [1, -1]) for (const sz of [.75, -.75]) { const wh = mesh(new T.CylinderGeometry(.19, .19, .16, 18), dark, sx * .4, -.12, sz); wh.rotation.z = Math.PI / 2; bus.add(wh); }
+    return { fly: plane, road: car, bus, sail: boat };
   },
   mount(world) {
     const T = THREE, M = MapV, scene = this.scene = new T.Scene(), box = $('#g3box');
@@ -2538,8 +2550,8 @@ const G3 = {
     return { L, lg, P, f, e, pos: a, fwd: b1.sub(b0), alt: this.alt(P, f) };
   },
   place(s, dt) {
-    const T = THREE, P = s.P, k = P.m + s.L + '|' + this.legs[s.L].parts.indexOf(P);
-    if (k !== this.vk) { this.vk = k; this.pop = 0; for (const m in this.mod) this.mod[m].visible = m === P.m; }
+    const T = THREE, P = s.P, k = (P.bus ? 'bus' : P.m) + s.L + '|' + this.legs[s.L].parts.indexOf(P);
+    if (k !== this.vk) { this.vk = k; this.pop = 0; for (const m in this.mod) this.mod[m].visible = m === (P.bus ? 'bus' : P.m); }
     this.pop = Math.min(1, this.pop + dt * 4);
     const up = s.pos.clone().normalize(), z = s.fwd.clone().normalize();
     if (P.m !== 'fly') z.sub(up.clone().multiplyScalar(z.dot(up))).normalize();
@@ -2548,7 +2560,7 @@ const G3 = {
     this.veh.quaternion.copy(this.q); this.veh.position.copy(s.pos);
     const len = Math.min(.04, (this.cur.dist - 1) * .09 + .006), sc = len / 1.6 * (.3 + .7 * Math.sin(this.pop * Math.PI / 2));
     this.veh.scale.setScalar(sc);
-    const g = this.mod[P.m], tt = performance.now() / 1000;
+    const g = this.mod[P.bus ? 'bus' : P.m], tt = performance.now() / 1000;
     if (P.m === 'sail') { g.rotation.z = Math.sin(tt * 1.7) * .07; g.rotation.x = Math.sin(tt * 1.3) * .04; g.position.y = Math.sin(tt * 2.1) * .03; }
     else if (P.m === 'road') { g.position.y = Math.sin(tt * 14) * .006; g.rotation.set(0, 0, 0); }
     else { g.rotation.z = Math.sin(tt * .9) * .05; g.position.y = 0; }
@@ -2601,12 +2613,12 @@ const G3 = {
     }));
   },
   // ----- the card at the bottom -----
-  verb(m) { return m === 'fly' ? ['Flying', 'Flew'] : m === 'road' ? ['Driving', 'Drove'] : ['Sailing', 'Sailed']; },
+  verb(m) { return m === 'fly' ? ['Flying', 'Flew'] : m === 'bus' ? ['Taking the bus', 'Took the bus'] : m === 'road' ? ['Driving', 'Drove'] : ['Sailing', 'Sailed']; },
   stepsHTML() {
     const M = MapV; let h = '';
     M.pts.forEach((p, i) => {
       h += `<button class="g3s${p.pass ? ' pass' : ''}" data-act="g3-stop" data-i="${i}" data-n="${i}"><i>${p.pass ? '' : p.num}</i><span>${esc(p.place)}</span></button>`;
-      if (i < M.pts.length - 1) { const ms = [...new Set(this.legs[i].parts.map(q => q.m))]; h += `<em class="g3c" data-n="${i}"><b>${ms.map(m => MODES[m][0]).join('')}</b></em>`; }
+      if (i < M.pts.length - 1) { const ms = [...new Set(this.legs[i].parts.map(pk))]; h += `<em class="g3c" data-n="${i}"><b>${ms.map(m => MODES[m][0]).join('')}</b></em>`; }
     });
     return h;
   },
@@ -2614,12 +2626,12 @@ const G3 = {
     const c = $('#g3card'); if (!c) return; const M = MapV, L = this.st ? this.st.L : 0, n = M.pts.length;
     if (!this.legs.length) { if (!c.querySelector('.g3hd b#g3only')) c.innerHTML = `<div class="g3hd"><div><b id="g3only">${esc(M.pts[0].place)}</b><small>Add another place to a chapter and the trip will travel between them.</small></div></div>`; return; }
     const reachedN = this.legs.reduce((k, l, j) => this.t >= l.start + l.dur - this.DW ? j + 1 : k, 0);
-    const ms = this.st ? this.st.P.m : 'fly', done = this.t >= this.total, sig = [L, ms, reachedN, this.playing, this.speed, this.mode, this.free, done].join();
+    const ms = this.st ? pk(this.st.P) : 'fly', done = this.t >= this.total, sig = [L, ms, reachedN, this.playing, this.speed, this.mode, this.free, done].join();
     const built = !!$('#g3steps'); if (!force && built && sig === this.sig) return; this.sig = sig;
-    const lg = this.legs[L], a = M.pts[lg.i - 1], b = M.pts[lg.i], vv = [...new Set(lg.parts.map(q => q.m))];
+    const lg = this.legs[L], a = M.pts[lg.i - 1], b = M.pts[lg.i], vv = [...new Set(lg.parts.map(pk))];
     const km = Math.round(lg.km), kmT = km >= 100 ? Math.round(km / 10) * 10 : km;
     const rr = M.leg(lg.i), nm = j => (rr && rr.wn && rr.wn[j]) || '', names = ((rr && rr.wn) || []).filter(Boolean);
-    const what = vv.length > 1 ? lg.parts.map((q, k) => { const v = this.verb(q.m)[1]; return (k ? v.toLowerCase() : v) + (k < lg.parts.length - 1 && nm(k) ? ' to ' + esc(nm(k)) : ''); }).join(', then ') : this.verb(vv[0])[1] + (names.length ? ' via ' + names.map(esc).join(', ') : '');
+    const what = vv.length > 1 ? lg.parts.map((q, k) => { const v = this.verb(pk(q))[1]; return (k ? v.toLowerCase() : v) + (k < lg.parts.length - 1 && nm(k) ? ' to ' + esc(nm(k)) : ''); }).join(', then ') : this.verb(vv[0])[1] + (names.length ? ' via ' + names.map(esc).join(', ') : '');
     // the card is built once and then only updated, so a swipe along the stops is never interrupted
     if (!built) {
       c.innerHTML = `<div class="g3hd"><div style="min-width:0;flex:1"><b id="g3t"></b><small id="g3w"></small></div><button class="g3sp" data-act="g3-speed" id="g3sp"></button><button class="cbtn g3play" data-act="g3-play" id="g3pl"></button></div>
