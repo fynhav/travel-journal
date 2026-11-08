@@ -394,7 +394,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.7'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.8'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1822,9 +1822,11 @@ function tripStops() {
     const c = dayCountry(e, d) || e.countries[0] || '', cc = ccOf(c);
     for (const v of (e.via && e.via[d]) || []) { const vp = (v || '').trim(); if (vp) { const vi = viaPlace(vp, c, cc); out.push({ place: vi.place, country: vi.country, cc: vi.cc, key: NORM(vi.place) + '|' + (vi.cc || NORM(vi.country)), start: d, end: d, days: 0, eid: e.id, eids: new Set([e.id]), pass: true }); } } // somewhere you passed through on the way here, without staying
     const pl = (e.days[d] || '').trim(); if (!pl) continue;
-    const key = NORM(pl) + '|' + (cc || NORM(c)), last = out[out.length - 1];
+    let pc = c, pcc = cc; // a place the list only knows in another country (London in a chapter set to Colombia) goes in its own country
+    if (!gazLookup(pl, cc)) { const g = gazLookup(pl, ''); if (g && g.cc && g.n === NORM(pl)) { pcc = g.cc; pc = ccName(g.cc) || c; } }
+    const key = NORM(pl) + '|' + (pcc || NORM(pc)), last = out[out.length - 1];
     if (last && !last.pass && last.key === key) { last.end = d; last.days++; last.eids.add(e.id); }
-    else out.push({ place: pl, country: c, cc, key, start: d, end: d, days: 1, eid: e.id, eids: new Set([e.id]) });
+    else out.push({ place: pl, country: pc, cc: pcc, key, start: d, end: d, days: 1, eid: e.id, eids: new Set([e.id]) });
   }
   return out;
 }
