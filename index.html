@@ -395,7 +395,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.15'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.16'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2363,6 +2363,53 @@ const G3 = {
     <div id="g3box"><canvas id="g3cv"></canvas><div id="g3pins"></div><div id="g3chip"></div><div id="g3load">Drawing the globe…</div></div>
     <div class="g3card" id="g3card"></div>`;
   },
+  // ----- relief: a gentle bump where the land is high -----
+  K: 0.0028, BAKE: .6, // K = how tall the highest land stands (globe radius = 1); BAKE = how strong the painted hill shading is
+  async loadDEM() {
+    if (this.dem || !this.K) return;
+    try {
+      const im = new Image(); im.src = 'vendor/elev.jpg'; await im.decode();
+      const W = im.naturalWidth, H = im.naturalHeight, c = document.createElement('canvas'); c.width = W; c.height = H;
+      const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(im, 0, 0);
+      const px = g.getImageData(0, 0, W, H).data, d = new Uint8Array(W * H); for (let i = 0; i < d.length; i++) d[i] = px[i * 4];
+      c.width = c.height = 1; this.dem = { w: W, h: H, d };
+    } catch { this.K = 0; this.dem = null; }
+  },
+  // land height 0..~1 (1 is about 7 km), smoothly blended
+  hgt(la, lo) {
+    const D = this.dem; if (!D) return 0;
+    const fx = (((lo + 180) % 360) + 360) % 360 / 360 * D.w - .5, fy = Math.max(0, Math.min(D.h - 1.001, (90 - la) / 180 * D.h - .5)), x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0, W = D.w;
+    const g = (x, y) => D.d[y * W + (((x % W) + W) % W)];
+    const v = (g(x0, y0) * (1 - tx) + g(x0 + 1, y0) * tx) * (1 - ty) + (g(x0, y0 + 1) * (1 - tx) + g(x0 + 1, y0 + 1) * tx) * ty, n = (v - 28) / 170;
+    return n <= 0 ? 0 : Math.min(1.2, n);
+  },
+  // the same, faded to nothing at the edge of the finely-drawn patch so it blends into the plain globe
+  hf(la, lo) {
+    const w = this.win; if (!w || !this.dem) return 0;
+    const l = w.lo0 + ((((lo - w.lo0) % 360) + 360) % 360), m = Math.min(l - w.lo0, w.lo1 - l, la - w.la0, w.la1 - la) / (.14 * Math.min(w.lo1 - w.lo0, w.la1 - w.la0));
+    if (m <= 0) return 0; return this.hgt(la, lo) * (m >= 1 ? 1 : m * m * (3 - 2 * m));
+  },
+  // radius of the ground at a point on the unit sphere
+  gr(u) { if (!this.K || !this.dem) return 1.0004; const [la, lo] = this.ll(u); return 1.0004 + this.K * this.hf(la, lo); },
+  // light and shadow painted onto the land from the heights, so ridges and valleys read even from straight above
+  shadeLand(g, w, W, H) {
+    const sw = Math.min(W, Math.round((w.lo1 - w.lo0) * 12)), sh = Math.min(H, Math.round((w.la1 - w.la0) * 12)), c = document.createElement('canvas'); c.width = sw; c.height = sh;
+    const x = c.getContext('2d'), im = x.createImageData(sw, sh), dla = (w.la1 - w.la0) / sh, dlo = (w.lo1 - w.lo0) / sw, zen = 45 * this.d2r, az = 135 * this.d2r, VE = 7000 * 5;
+    const Z = new Float32Array(sw * sh); for (let j = 0; j < sh; j++) for (let i = 0; i < sw; i++) Z[j * sw + i] = this.hf(w.la1 - (j + .5) * dla, w.lo0 + (i + .5) * dlo);
+    const z = (i, j) => Z[Math.max(0, Math.min(sh - 1, j)) * sw + Math.max(0, Math.min(sw - 1, i))];
+    for (let j = 0; j < sh; j++) {
+      const la = w.la1 - (j + .5) * dla, cx = dlo * 111000 * Math.cos(la * this.d2r), cy = dla * 111000;
+      for (let i = 0; i < sw; i++) {
+        const a = z(i - 1, j - 1), b = z(i, j - 1), cc = z(i + 1, j - 1), d = z(i - 1, j), f = z(i + 1, j), gg = z(i - 1, j + 1), h = z(i, j + 1), ii = z(i + 1, j + 1);
+        const dx = ((cc + 2 * f + ii) - (a + 2 * d + gg)) / 8 * VE / cx, dy = ((gg + 2 * h + ii) - (a + 2 * b + cc)) / 8 * VE / cy;
+        const sl = Math.atan(Math.hypot(dx, dy)), asp = Math.atan2(dy, -dx), hs = Math.cos(zen) * Math.cos(sl) + Math.sin(zen) * Math.sin(sl) * Math.cos(az - asp);
+        const m = 1 + this.BAKE * (hs / Math.cos(zen) - 1), o = (j * sw + i) * 4; // m < 1: in shadow, m > 1: catching the light
+        if (m < 1) { im.data[o] = 150; im.data[o + 1] = 112; im.data[o + 2] = 76; im.data[o + 3] = Math.min(105, (1 - m) * 240); }
+        else { im.data[o] = 255; im.data[o + 1] = 250; im.data[o + 2] = 236; im.data[o + 3] = Math.min(110, (m - 1) * 300); }
+      }
+    }
+    x.putImageData(im, 0, 0); g.save(); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W, H); g.restore();
+  },
   // ----- the route as points on the globe -----
   gc(p, q) {
     const A = this.v3(p[0], p[1]), B = this.v3(q[0], q[1]), om = A.angleTo(B), n = Math.max(6, Math.min(160, Math.ceil(om / .004))), s = Math.sin(om), out = [];
@@ -2397,7 +2444,7 @@ const G3 = {
     f = Math.max(0, Math.min(1, f)); const s = f * P.len; let lo = 0, hi = P.cum.length - 1;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (P.cum[mid] <= s) lo = mid; else hi = mid; }
     const d = P.cum[hi] - P.cum[lo], w = d > 0 ? (s - P.cum[lo]) / d : 0, u = P.U[lo].clone().lerp(P.U[hi], w).normalize();
-    return { u, r: this.RAD[P.m] + this.alt(P, f) };
+    return { u, r: this.gr(u) + (this.RAD[P.m] - 1.0004) + this.alt(P, f) };
   },
   pos(P, f) { const a = this.at(P, f); return a.u.multiplyScalar(a.r); },
   build() {
@@ -2413,7 +2460,7 @@ const G3 = {
   // ----- the scene -----
   // The globe is painted twice: once for the whole world, and once in much finer detail over the area you travelled,
   // so coastlines stay sharp when you zoom right in.
-  paint(world, W, H, w, ls) {
+  paint(world, W, H, w, ls, relief) {
     const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
     const X = lo => (lo - w.lo0) / (w.lo1 - w.lo0) * W, Y = la => (w.la1 - la) / (w.la1 - w.la0) * H;
     const sea = g.createLinearGradient(0, 0, 0, H); sea.addColorStop(0, '#C9DDDB'); sea.addColorStop(.5, '#D9E9E7'); sea.addColorStop(1, '#C9DDDB'); g.fillStyle = sea; g.fillRect(0, 0, W, H);
@@ -2433,6 +2480,7 @@ const G3 = {
         g.fill('evenodd'); g.stroke();
       }
     }
+    if (relief && this.K && this.dem && this.BAKE) this.shadeLand(g, w, W, H);
     const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = this.rd.capabilities.getMaxAnisotropy(); return tx;
   },
   // the box on the globe (degrees) that holds every stop, with some room round it
@@ -2486,8 +2534,11 @@ const G3 = {
     const T = THREE, M = MapV, scene = this.scene = new T.Scene(), box = $('#g3box');
     const globe = new T.Mesh(new T.SphereGeometry(1, 128, 96), new T.MeshLambertMaterial({ map: this.paint(world, 4096, 2048, { lo0: -180, lo1: 180, la0: -90, la1: 90 }, 1) }));
     scene.add(globe); this.globe = globe;
-    const w = this.window(), ppd = Math.min(3584 / (w.lo1 - w.lo0), 3584 / (w.la1 - w.la0), 160), pw = Math.round((w.lo1 - w.lo0) * ppd), ph = Math.round((w.la1 - w.la0) * ppd);
-    const patch = new T.Mesh(new T.SphereGeometry(1.0004, 120, 80, (w.lo0 + 180) * this.d2r, (w.lo1 - w.lo0) * this.d2r, (90 - w.la1) * this.d2r, (w.la1 - w.la0) * this.d2r), new T.MeshLambertMaterial({ map: this.paint(world, pw, ph, w, 1.35) }));
+    const w = this.win = this.window(), ppd = Math.min(3584 / (w.lo1 - w.lo0), 3584 / (w.la1 - w.la0), 160), pw = Math.round((w.lo1 - w.lo0) * ppd), ph = Math.round((w.la1 - w.la0) * ppd);
+    const rel = !!(this.K && this.dem), sx = rel ? Math.max(120, Math.min(480, Math.round((w.lo1 - w.lo0) * 4))) : 120, sy = rel ? Math.max(80, Math.min(360, Math.round((w.la1 - w.la0) * 4))) : 80;
+    const pg = new T.SphereGeometry(1.0004, sx, sy, (w.lo0 + 180) * this.d2r, (w.lo1 - w.lo0) * this.d2r, (90 - w.la1) * this.d2r, (w.la1 - w.la0) * this.d2r);
+    if (rel) { const ps = pg.attributes.position, v = new T.Vector3(); for (let k = 0; k < ps.count; k++) { v.fromBufferAttribute(ps, k).normalize(); ps.setXYZ(k, v.x, v.y, v.z); v.multiplyScalar(this.gr(v)); ps.setXYZ(k, v.x, v.y, v.z); } pg.computeVertexNormals(); }
+    const patch = new T.Mesh(pg, new T.MeshLambertMaterial({ map: this.paint(world, pw, ph, w, 1.35, true) }));
     scene.add(patch);
     scene.add(new T.Mesh(new T.SphereGeometry(1.07, 64, 48), new T.ShaderMaterial({
       transparent: true, side: T.BackSide, depthWrite: false,
@@ -2513,13 +2564,13 @@ const G3 = {
     const COL = { road: 0xB5562F, fly: 0xB5562F, sail: 0x2F7F86 };
     for (const lg of this.legs) for (const P of lg.parts) {
       const R = this.RAD[P.m];
-      P.mat = line(COL[P.m], .0006, 1); tube(P.U.map((u, k) => u.clone().multiplyScalar(R + this.alt(P, P.cum[k] / P.len))), .0006, P.mat);
-      if (P.m === 'fly') { P.shd = line(0x5A4632, .0004, .22); tube(P.U.map(u => u.clone().multiplyScalar(1.0008)), .0004, P.shd); }
+      P.mat = line(COL[P.m], .0006, 1); tube(P.U.map((u, k) => u.clone().multiplyScalar(this.gr(u) + (R - 1.0004) + this.alt(P, P.cum[k] / P.len))), .0006, P.mat);
+      if (P.m === 'fly') { P.shd = line(0x5A4632, .0004, .22); tube(P.U.map(u => u.clone().multiplyScalar(this.gr(u) + .0004)), .0004, P.shd); }
     }
     // stops
     const wps = []; this.legs.forEach(lg => { const r = M.leg(lg.i); (r && r.wn || []).forEach((n, j) => { if (n && r.wp[j]) wps.push({ place: n, ll: r.wp[j], kind: 'wp' }); }); });
     this.pl = [...M.pts.map((p, i) => ({ place: p.place, ll: p.ll, kind: p.pass ? 'pass' : 'stop', i, st: p })), ...wps];
-    this.pin = this.pl.map(p => this.v3(p.ll[0], p.ll[1], 1.004));
+    this.pin = this.pl.map(p => { const u = this.v3(p.ll[0], p.ll[1]); return u.multiplyScalar(this.gr(u) + .0036); });
     $('#g3pins').innerHTML = this.pl.map(p => p.kind === 'wp' ? `<div class="mp via"><i></i><span class="ml">${esc(p.place)}</span></div>` : `<button class="mp${p.kind === 'pass' ? ' pass' : ''}" data-act="g3-stop" data-i="${p.i}" aria-label="${esc(p.place)}"><i>${p.kind === 'pass' ? '' : p.st.num}</i><span class="ml">${esc(p.place)}</span></button>`).join('');
     // the traveller
     this.mod = this.models(); this.veh = new T.Group(); for (const k in this.mod) { this.mod[k].visible = false; this.veh.add(this.mod[k]); } scene.add(this.veh);
@@ -2564,7 +2615,7 @@ const G3 = {
     if (P.m === 'sail') { g.rotation.z = Math.sin(tt * 1.7) * .07; g.rotation.x = Math.sin(tt * 1.3) * .04; g.position.y = Math.sin(tt * 2.1) * .03; }
     else if (P.m === 'road') { g.position.y = Math.sin(tt * 14) * .006; g.rotation.set(0, 0, 0); }
     else { g.rotation.z = Math.sin(tt * .9) * .05; g.position.y = 0; }
-    const u = up.clone(); this.shade.visible = P.m === 'fly'; if (P.m === 'fly') { this.shade.position.copy(u).multiplyScalar(1.0019); this.shade.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), u); this.shade.scale.setScalar(sc * 1.5); this.shade.material.opacity = Math.max(.05, .26 - s.alt * 2.2); }
+    const u = up.clone(); this.shade.visible = P.m === 'fly'; if (P.m === 'fly') { this.shade.position.copy(u).multiplyScalar(this.gr(u) + .0015); this.shade.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), u); this.shade.scale.setScalar(sc * 1.5); this.shade.material.opacity = Math.max(.05, .26 - s.alt * 2.2); }
   },
   frame(now) {
     if (!this.on) return; this.raf = requestAnimationFrame(t => this.frame(t));
@@ -2686,6 +2737,7 @@ const G3 = {
     for (let k = 0; k < 8 && !($('#g3box').clientWidth > 50 && $('#g3box').clientHeight > 50); k++) await new Promise(r => requestAnimationFrame(r));
     let world; try { world = await M.loadWorld(); } catch { toast('The map data is missing'); this.close(); return; }
     if (!this.on) return; await new Promise(r => setTimeout(r, 30)); if (!this.on) return;
+    await this.loadDEM(); if (!this.on) return;
     this.build(); this.mount(world); this.bind($('#g3cv')); const ld = $('#g3load'); if (ld) ld.remove();
     this.ro = new ResizeObserver(() => this.resize()); this.ro.observe($('#g3box')); this.last = 0; this.raf = requestAnimationFrame(t => this.frame(t));
   },
