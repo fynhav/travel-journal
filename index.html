@@ -2621,7 +2621,7 @@ const G3 = {
     const x = up.clone().cross(z).normalize(), y = z.clone().cross(x).normalize(), m4 = new T.Matrix4().makeBasis(x, y, z), qt = new T.Quaternion().setFromRotationMatrix(m4);
     if (this.first) { this.q.copy(qt); this.first = false; } else this.q.slerp(qt, 1 - Math.exp(-dt * 9));
     this.veh.quaternion.copy(this.q); this.veh.position.copy(s.pos);
-    const len = Math.min(.04, (this.cur.dist - 1) * .09 + .006), sc = len / 1.6 * (.3 + .7 * Math.sin(this.pop * Math.PI / 2));
+    const len = Math.max(.0004, Math.min(.04, (this.cur.dist - 1) * .045)), sc = len / 1.6 * (.3 + .7 * Math.sin(this.pop * Math.PI / 2));
     this.veh.scale.setScalar(sc);
     const g = this.mod[P.bus ? 'bus' : P.m], tt = performance.now() / 1000;
     if (P.m === 'sail') { g.rotation.z = Math.sin(tt * 1.7) * .07; g.rotation.x = Math.sin(tt * 1.3) * .04; g.position.y = Math.sin(tt * 2.1) * .03; }
@@ -2646,7 +2646,8 @@ const G3 = {
     c.lon = ((c.lon + 540) % 360) - 180; c.lat = Math.max(-80, Math.min(80, c.lat));
     const cam = this.cam, tl = Math.max(-85, Math.min(85, c.lat - c.tilt));
     cam.position.copy(this.v3(tl, c.lon, c.dist)); cam.up.set(0, 1, 0); cam.lookAt(this.v3(c.lat, c.lon, 1)); cam.updateMatrixWorld();
-    this.uS.value = Math.max(.4, Math.min(5, (c.dist - 1) / .3));
+    const nr = Math.max(.0006, Math.min(.01, (c.dist - 1) * .12)); if (Math.abs(nr - cam.near) > nr * .08) { cam.near = nr; cam.updateProjectionMatrix(); }
+    this.uS.value = Math.max(.012, Math.min(5, (c.dist - 1) / .3));
     if (this.shMat) { const z = Math.max(0, Math.min(1, (c.dist - 1.04) / .2)); this.shMat.opacity = .3 + .7 * z * z * (3 - 2 * z); } // painted shading softens when zoomed right in, where the data is too coarse for it
     this.sun.position.copy(cam.position).add(new THREE.Vector3(-.6, .9, .4));
     this.pins(); this.paintCard(false); this.rd.render(this.scene, cam);
