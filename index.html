@@ -395,7 +395,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.13'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.14'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2591,16 +2591,23 @@ const G3 = {
     const els = $$('#g3pins .mp'), M = MapV, W = this.W, H = this.H, cp = this.cam.position, cd = cp.length(), ch = cp.clone().normalize(), rects = [], today = iso(new Date());
     const L = this.st ? this.st.L : 0, dest = this.legs.length ? L + 1 : 0, reached = i => i === 0 ? this.t >= this.LEAD : this.t >= this.legs[i - 1].start + this.legs[i - 1].dur - this.DW;
     const pr = k => { const q = this.pl[k]; return q.kind === 'wp' ? -1 : q.i === dest ? 3 : q.i === L ? 2 : q.kind === 'pass' ? 0 : 1; };
+    // keep pins and their labels off the vehicle: anything under it fades out, so the car, bus, boat or plane is never hidden
+    let vx = -1e4, vy = -1e4, vr = 0;
+    if (this.st && this.veh) {
+      const vp = this.veh.position, vv = vp.clone().project(this.cam);
+      if (vv.z < 1 && vp.clone().normalize().dot(ch) > 1 / cd) { vx = (vv.x * .5 + .5) * W; vy = (-vv.y * .5 + .5) * H; const vl = Math.min(.04, (this.cur.dist - 1) * .09 + .006), px = H * vl / (2 * cp.distanceTo(vp) * Math.tan(THREE.MathUtils.degToRad(20))); vr = Math.max(16, Math.min(110, px * .6 + 12)); }
+    }
     const order = els.map((_, k) => k).sort((a, b) => pr(b) - pr(a) || ((this.pl[b].st ? this.pl[b].st.days : 0) - (this.pl[a].st ? this.pl[a].st.days : 0)));
     for (const k of order) {
       const q = this.pl[k], el = els[k], p = this.pin[k], v = p.clone().project(this.cam), front = p.clone().normalize().dot(ch) > 1 / cd + .015 && v.z < 1;
       const sx = (v.x * .5 + .5) * W, sy = (-v.y * .5 + .5) * H, out = !front || sx < -28 || sy < -28 || sx > W + 28 || sy > H + 28;
       el.style.display = out ? 'none' : ''; if (out) continue;
       el.style.transform = `translate(${sx - 14}px,${sy - 14}px)`;
+      const under = Math.hypot(sx - vx, sy - vy) < vr + 10; el.style.opacity = under ? '.12' : ''; el.style.pointerEvents = under ? 'none' : '';
       if (q.kind !== 'wp') { const i = q.i, st = q.st, past = reached(i), cls = 'mp' + (q.kind === 'pass' ? ' pass' : '') + (st.start > today ? ' plan' : '') + (i === dest ? ' sel' : past ? ' past' : ' fut'); if (el.className.replace(' nolab', '') !== cls) el.className = cls; }
       const sel = q.kind !== 'wp' && q.i === dest, w = Math.min(130, q.place.length * 6.6 + 14), r = { x0: sx + 16, x1: sx + 16 + w, y0: sy - 11, y1: sy + 11 };
-      const clash = rects.some(z => r.x0 < z.x1 && r.x1 > z.x0 && r.y0 < z.y1 && r.y1 > z.y0) || sx + 16 + w > W + 4;
-      el.classList.toggle('nolab', clash && !sel);
+      const clash = rects.some(z => r.x0 < z.x1 && r.x1 > z.x0 && r.y0 < z.y1 && r.y1 > z.y0) || sx + 16 + w > W + 4 || (r.x0 < vx + vr && r.x1 > vx - vr && r.y0 < vy + vr && r.y1 > vy - vr);
+      el.classList.toggle('nolab', clash && (!sel || under));
       rects.push(clash && !sel ? { x0: sx - 14, x1: sx + 14, y0: sy - 14, y1: sy + 14 } : r);
     }
     this.trail();
