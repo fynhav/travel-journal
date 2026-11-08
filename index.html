@@ -395,7 +395,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.14'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.15'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2389,7 +2389,7 @@ const G3 = {
     const U = []; for (const p of pts) { const u = this.v3(p[0], p[1]); if (!U.length || u.distanceTo(U[U.length - 1]) > 1e-6) U.push(u); }
     if (U.length < 2) U.push(U[0].clone().add(new THREE.Vector3(1e-5, 0, 0)).normalize());
     const cum = [0]; for (let k = 1; k < U.length; k++) cum.push(cum[k - 1] + U[k].angleTo(U[k - 1]));
-    const len = cum[cum.length - 1] || 1e-6, H = m === 'fly' ? Math.min(.05, .01 + .35 * len) : 0;
+    const len = cum[cum.length - 1] || 1e-6, H = m === 'fly' ? Math.min(.016, .0008 + .07 * len) : 0; // flight height scales with the distance, so short hops stay low
     return { m, bus: bus ? 1 : 0, U, cum, len, H };
   },
   alt(P, f) { return P.m === 'fly' ? P.H * Math.pow(Math.sin(Math.PI * Math.max(0, Math.min(1, f))), .8) : 0; },
