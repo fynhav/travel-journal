@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.17'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.18'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -2448,7 +2448,13 @@ const G3 = {
     f = Math.max(0, Math.min(1, f)); const s = f * P.len; let lo = 0, hi = P.cum.length - 1;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (P.cum[mid] <= s) lo = mid; else hi = mid; }
     const d = P.cum[hi] - P.cum[lo], w = d > 0 ? (s - P.cum[lo]) / d : 0, u = P.U[lo].clone().lerp(P.U[hi], w).normalize();
-    return { u, r: this.gr(u) + (this.RAD[P.m] - 1.0004) + this.alt(P, f) };
+    return { u, r: this.fr(P, u, f) };
+  },
+  // radius of the traveller / route at a fraction of a part: road and sail hug the ground; a plane climbs to clear the highest ground on its way, then comes down
+  fr(P, u, f) {
+    const g = this.gr(u); let r = g + (this.RAD[P.m] - 1.0004) + this.alt(P, f);
+    if (P.m === 'fly' && P.gm > g) r += (P.gm - g) * Math.min(1, Math.sin(Math.PI * Math.max(0, Math.min(1, f))) * 2.2);
+    return r;
   },
   pos(P, f) { const a = this.at(P, f); return a.u.multiplyScalar(a.r); },
   build() {
@@ -2569,7 +2575,8 @@ const G3 = {
     const COL = { road: 0xB5562F, fly: 0xB5562F, sail: 0x2F7F86 };
     for (const lg of this.legs) for (const P of lg.parts) {
       const R = this.RAD[P.m];
-      P.mat = line(COL[P.m], .0006, 1); tube(P.U.map((u, k) => u.clone().multiplyScalar(this.gr(u) + (R - 1.0004) + this.alt(P, P.cum[k] / P.len))), .0006, P.mat);
+      P.mat = line(COL[P.m], .0006, 1); if (P.m === 'fly') P.gm = Math.max(...P.U.map(u => this.gr(u)));
+      tube(P.U.map((u, k) => u.clone().multiplyScalar(this.fr(P, u, P.cum[k] / P.len))), .0006, P.mat);
       if (P.m === 'fly') { P.shd = line(0x5A4632, .0004, .22); tube(P.U.map(u => u.clone().multiplyScalar(this.gr(u) + .0004)), .0004, P.shd); }
     }
     // stops
