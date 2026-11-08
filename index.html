@@ -44,7 +44,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .pill.ghost{background:transparent;border-color:transparent;color:var(--accent);font-weight:700}
 .okb{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px 0 9px;border-radius:15px;background:#E1EAD3;color:#33502A;font-size:11.5px;font-weight:700;flex:none;margin-left:auto}
 .dow{display:grid;grid-template-columns:repeat(7,1fr);font-size:10.5px;font-weight:600;color:var(--muted);text-align:center;padding:10px 0 6px;letter-spacing:.06em;text-transform:uppercase}
-.cal{background:var(--card);border:1px solid #F0E8D8;border-radius:24px;overflow:hidden;box-shadow:0 6px 24px rgba(120,90,50,.10)}
+.dedit{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font:inherit;color:inherit;padding:6px 0}.dedit span{opacity:.6;display:inline-flex}.dedit:active{opacity:.6}
+.cal{touch-action:pan-y;background:var(--card);border:1px solid #F0E8D8;border-radius:24px;overflow:hidden;box-shadow:0 6px 24px rgba(120,90,50,.10)}
 .week{position:relative;display:grid;grid-template-columns:repeat(7,1fr);border-top:1px solid #F0E8D8}
 .cell{position:relative;height:74px;border:0;background:transparent;padding:6px 0 0 8px;text-align:left;display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;overflow:hidden;cursor:pointer;min-width:0}
 .num{display:block;font-size:12px;font-weight:600;line-height:20px;width:22px;height:20px;text-align:center;border-radius:10px;margin-left:-3px}
@@ -394,7 +395,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.9'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-08.11'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -992,7 +993,7 @@ function entryHTML(e) {
   <div class="wrap" style="padding-top:0">
     <div class="hero big">${cover(e)}<div class="hp l">${c0 ? flagOf(c0) + ' ' + esc(e.countries.join(' → ')) : 'No country yet'}</div><label class="hp r">${ps.length} photo${ps.length === 1 ? '' : 's'}<span class="plus">${ico('plus', 13, '#fff', 3)}</span><input type="file" accept="image/*" multiple data-change="photos" hidden></label></div>
   </div>
-  <div class="meta"><div style="flex:1;min-width:0"><div class="ml">${rangeLabel(e.start, e.end)} · ${days.length} day${days.length > 1 ? 's' : ''}</div><div class="ms">${mine.length ? esc(mine.join(' · ')) : 'No place yet'}</div></div><div class="prog"><div class="pt">${answered} of ${e.qa.length} covered</div><div class="pb"><i style="width:${pct}%"></i></div></div></div>
+  <div class="meta"><div style="flex:1;min-width:0"><div class="ml"><button class="dedit" data-act="dates" aria-label="Change dates">${rangeLabel(e.start, e.end)} · ${days.length} day${days.length > 1 ? 's' : ''} <span>${ico('pen', 14)}</span></button></div><div class="ms">${mine.length ? esc(mine.join(' · ')) : 'No place yet'}</div></div><div class="prog"><div class="pt">${answered} of ${e.qa.length} covered</div><div class="pb"><i style="width:${pct}%"></i></div></div></div>
   <div class="tools"><button class="tbtn solid" data-act="story">${e.story ? '📖 Read story' : '✨ Create story'}</button></div>
   <div class="tabs">${[['prompts', 'Prompts'], ['photos', 'Photos'], ['notes', 'Notes'], ['where', 'Where']].map(([k, l]) => `<button class="pill${tab === k ? ' on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div>
   <div class="wrap" style="padding-top:0">${body}</div>
@@ -2749,7 +2750,33 @@ document.addEventListener('click', async ev => {
     case 'map-find': closeSheet(); MapV.findOnline(); break;
     case 'map-place': { closeSheet(); MapV.placing = t.dataset.k; MapV.note(MapV.missing()); toast('Tap the map where it is'); break; }
     case 'reload': if (Rec.active) { toast('Finish your recording first'); break; } await flush(); location.reload(); break;
-    case 'more': openSheet(`<h3>Chapter ${chapterNo(e)}</h3><div class="stack"><button class="btn" data-act="share-close">Send chapter to Claude</button><button class="btn danger" data-act="del-entry-close">Delete chapter</button><button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
+    case 'dates': {
+      const e = cur(); if (!e) break;
+      openSheet(`<h3>Chapter dates</h3><p class="hint" style="margin-top:0">Change when this chapter starts and ends. Days you add copy the place of the nearest day; days you cut are dropped from this chapter.</p><label>First day<input id="dStart" type="date" value="${e.start}"></label><label>Last day<input id="dEnd" type="date" value="${e.end}"></label><p class="hint" id="dErr" style="color:#B5562F;margin:6px 0 0"></p><div class="btns"><button class="btn pri" data-act="dates-ok" style="flex:1">Save dates</button><button class="btn ghost" data-act="close-sheet">Cancel</button></div>`);
+      break;
+    }
+    case 'dates-ok': {
+      const e = cur(); if (!e) break;
+      const a = $('#dStart').value, b = $('#dEnd').value, err = m => { $('#dErr').textContent = m; };
+      if (!a || !b) return err('Pick both dates.');
+      if (a > b) return err('The last day is before the first day.');
+      if (daysBetween(a, b) > 120) return err('That is more than 120 days; split it into chapters.');
+      const clash = S.entries.find(x => x.id !== e.id && x.start <= b && x.end >= a);
+      if (clash) return err('That overlaps chapter ' + chapterNo(clash) + ' (' + rangeLabel(clash.start, clash.end) + '). Shorten that one first.');
+      const old = range(e.start, e.end), nu = range(a, b), first = old[0], last = old[old.length - 1];
+      const nearest = d => d < first ? first : d > last ? last : d;
+      const days = {}, dc = e.dc ? {} : null, via = e.via ? {} : null;
+      for (const d of nu) {
+        const src = old.includes(d) ? d : nearest(d);
+        days[d] = e.days[src] || '';
+        if (dc) dc[d] = e.dc[src] || e.countries[0] || '';
+        if (via && old.includes(d) && e.via[d]) via[d] = e.via[d];
+      }
+      e.start = a; e.end = b; e.days = days;
+      if (dc) e.dc = dc; if (via) e.via = via;
+      await saveEntry(e); $('#sheet').classList.remove('on'); rerender(); break;
+    }
+    case 'more': openSheet(`<h3>Chapter ${chapterNo(e)}</h3><div class="stack"><button class="btn" data-act="dates">Change dates</button><button class="btn" data-act="share-close">Send chapter to Claude</button><button class="btn danger" data-act="del-entry-close">Delete chapter</button><button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
     case 'share-close': closeSheet(); shareChapter(e); break;
     case 'del-entry-close': closeSheet(); document.querySelector('[data-act="del-entry"]') ? 0 : 0; await delEntry(e); break;
     case 'send-pick': openSheet(`<h3>Send which chapter?</h3><div class="stack">${chapters().map(x => `<button class="btn" data-act="send-ch" data-id="${x.id}">Chapter ${chapterNo(x)}${chTitle(x) ? ': ' + esc(chTitle(x)) : ''}</button>`).join('') || '<p class="hint">No chapters yet.</p>'}<button class="btn ghost" data-act="close-sheet">Close</button></div>`); break;
@@ -2868,6 +2895,22 @@ document.addEventListener('change', async ev => {
     const file = t.files[0]; t.value = ''; if (file) restore(file);
   }
 });
+// swipe left/right on the calendar to change month
+(() => {
+  let x0 = 0, y0 = 0, t0 = 0, on = false;
+  const ok = el => S.view === 'cal' && !Lock.locked && !$('#sheet.on') && el.closest && el.closest('#app') && !el.closest('input,textarea,select');
+  document.addEventListener('touchstart', e => { on = e.touches.length === 1 && ok(e.target); if (on) { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); } }, { passive: true });
+  document.addEventListener('touchcancel', () => { on = false; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    if (!on) return; on = false;
+    const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < 55 || Math.abs(dx) < 1.5 * Math.abs(dy) || Date.now() - t0 > 900) return;
+    const dir = dx < 0 ? 1 : -1;
+    S.month = new Date(S.month.getFullYear(), S.month.getMonth() + dir, 1);
+    render(); scrollTo(0, scrollY);
+    const c = $('.cal'); if (c && c.animate) c.animate([{ transform: `translateX(${dir * 36}px)`, opacity: .2 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: 'ease-out' });
+  }, { passive: true });
+})();
 document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } if (ev.target.id === 'viaIn' && ev.key === 'Enter') { ev.preventDefault(); $('[data-act="via-ok"]')?.click(); } });
 window.addEventListener('pagehide', () => { flush(); if (Rec.active) { Rec.cut = true; Rec.stop(); } });
 window.addEventListener('online', () => { Stt.run(); Cover.retryAll(); paintVoice(); SW.check(true); if (MapV.alive) MapV.fetchPending(); });
