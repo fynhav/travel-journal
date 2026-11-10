@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-09.23'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-09.25'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1049,7 +1049,7 @@ function entryHTML(e) {
   if (tab === 'prompts') {
     const old = e.qa.map((x, i) => [x, i]).filter(([x]) => x.a.trim());
     body = `<div class="cd" style="padding-top:6px"><div class="clh" style="font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;padding:10px 0 2px">Things to cover <small style="text-transform:none;letter-spacing:0;font-weight:500">ticks appear as you talk, or tap to tick by hand</small></div><div id="coverList">${e.qa.map((x, i) => qRow(x, i, true)).join('') || '<p class="hint">No questions yet.</p>'}</div></div>
-    <div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q"${e.qa.some(x => x.kind === 'smart' && !x.done && !x.a.trim()) ? ' data-redo="1">↻ New questions' : '>✨ Smart questions'}</button><button class="btn" data-act="own-q">+ My own</button>${e.talk.trim() && e.qa.some(x => !x.done) ? '<button class="btn" data-act="cover-now">✓ Tick what I\'ve covered</button>' : ''}</div>
+    <div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q"${e.qa.some(x => x.kind === 'smart' && !x.done && !x.a.trim()) ? ' data-redo="1">↻ New questions' : '>✨ Smart questions'}</button><button class="btn" data-act="own-q">+ My own</button>${e.talk.trim() && e.qa.some(x => !x.done) ? '<button class="btn" data-act="cover-now">✓ Tick what I\'ve covered</button>' : ''}</div><p class="hint" id="cvs2" style="margin:6px 2px 0">${esc(Cover.err ? 'Last tick check failed: ' + Cover.err : Cover.last || '')}</p>
     <div class="cd story-box"><div class="q" style="margin-bottom:6px">Your story</div><textarea data-field="talk" placeholder="Tap Record and tell it in your own words, or type here…">${esc(e.talk)}</textarea><div class="voice" data-t="talk"></div></div>
     ${old.length ? `<details class="earlier"><summary>Earlier answers (${old.length})</summary>${old.map(([x, i]) => `<div class="cd"><div class="q" style="margin-bottom:6px">${esc(x.q || 'Your own heading')}</div><textarea data-field="qa" data-i="${i}">${esc(x.a)}</textarea></div>`).join('')}</details>` : ''}`;
   } else if (tab === 'photos') {
@@ -1270,14 +1270,14 @@ async function addPhotos(files, e) {
 
 // ---------- sort into prompts, and the coffee-table story ----------
 const STORY_MODEL = 'claude-sonnet-5-5';
-async function claudeText(system, user, max, model = MODEL, purpose = 'Other') {
+async function claudeText(system, user, max, model = MODEL, purpose = 'Other', soft = false) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(170000) : undefined,
     headers: { 'content-type': 'application/json', 'x-api-key': Vault.apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
     body: JSON.stringify({ model, max_tokens: max, system, messages: [{ role: 'user', content: user }] })
   });
   if (!r.ok) { const er = new Error(r.status === 401 ? 'That API key was rejected' : r.status === 429 ? 'Claude is busy or out of credit. Try again in a minute' : 'Claude returned an error (' + r.status + ')'); er.status = r.status; throw er; }
-  const d = await r.json(); Usage.ai(purpose, model, d.usage); if (d.stop_reason === 'max_tokens') { const er = new Error('That was too long for one go'); er.long = true; throw er; }
+  const d = await r.json(); Usage.ai(purpose, model, d.usage); if (d.stop_reason === 'max_tokens' && !soft) { const er = new Error('That was too long for one go'); er.long = true; throw er; }
   return (d.content || []).map(c => c.text || '').join('');
 }
 function aiReady() {
@@ -1819,7 +1819,7 @@ const Cover = {
   busy: new Set(), again: new Set(),
   can: () => !!(Vault.key && Vault.apiKey && navigator.onLine),
   err: '',
-  paint() { const el = $('#cvs'); if (el) el.textContent = this.busy.size ? 'Checking what you have covered…' : this.err ? 'Could not tick yet: ' + this.err + '. Trying again with the next part.' : this.last ? this.last : 'Waiting for the first part of your story to be turned into text…'; },
+  paint() { const e2 = $('#cvs2'); if (e2) e2.textContent = this.err ? 'Last tick check failed: ' + this.err : this.last || ''; const el = $('#cvs'); if (el) el.textContent = this.busy.size ? 'Checking what you have covered…' : this.err ? 'Could not tick yet: ' + this.err + '. Trying again with the next part.' : this.last ? this.last : 'Waiting for the first part of your story to be turned into text…'; },
   async check(e, manual) {
     if (!e) return;
     if (!(e.talk || '').trim()) { if (manual) toast('Record or type your story first'); return; }
@@ -1829,12 +1829,12 @@ const Cover = {
     if (!this.can()) { if (!e.needCheck) { e.needCheck = true; saveEntry(e); } if (manual) toast(!Vault.apiKey ? 'Add your Anthropic API key in Settings first' : 'You need signal for this'); return; }
     this.busy.add(e.id); this.paint(); const gen = Lock.gen;
     try {
-      const sys = `You check which questions a traveller has talked about while telling the story of a trip chapter. You get a numbered list of questions and the transcript so far (dictated, so expect typos, and it may be in any language). Reply with only a JSON array of the numbers of the questions the transcript talks about or answers, for example [1,3]. Be generous: a question counts when the traveller says anything real about that topic, even in a sentence, and it does not need to be the exact words of the question. Only skip a question when the topic never comes up. Reply [] if none.`,
+      const sys = `You check which questions a traveller has talked about while telling the story of a trip chapter. You get a numbered list of questions and the transcript so far (dictated, so expect typos, and it may be in any language). Reply with only a JSON array of the numbers of the questions the transcript talks about or answers, for example [1,3]. Be generous: a question counts when the traveller says anything real about that topic, even in a sentence, and it does not need to be the exact words of the question. Only skip a question when the topic never comes up. Reply [] if none. Do not explain: your whole reply is just the array.`,
         usr = `Questions:\n${open.map((x, i) => `${i + 1}. ${x.q}`).join('\n')}\n\nTranscript:\n${e.talk.trim().slice(-12000)}`;
-      let out; try { out = await claudeText(sys, usr, 120, MODEL, 'Ticking questions'); }
-      catch (er) { if (er.status === 400 || er.status === 404) out = await claudeText(sys, usr, 120, STORY_MODEL, 'Ticking questions'); else throw er; } // if the quick model is not available on this key, use the other one
+      let out; try { out = await claudeText(sys, usr, 1500, MODEL, 'Ticking questions', true); }
+      catch (er) { if (er.status === 400 || er.status === 404) out = await claudeText(sys, usr, 1500, STORY_MODEL, 'Ticking questions', true); else throw er; } // if the quick model is not available on this key, use the other one
       if (Lock.gen !== gen) return;
-      const m = out.match(/\[[\d,\s]*\]/), ids = m ? JSON.parse(m[0]) : null;
+      const ms = out.match(/\[[\d,\s]*\]/g), ids = ms ? JSON.parse(ms[ms.length - 1]) : null;
       if (!ids) throw new Error('Claude gave an answer I could not read');
       let n = 0; for (const k of ids) { const x = open[k - 1]; if (x && (manual || !x.man) && !x.done) { x.done = true; x.man = false; n++; } }
       e.needCheck = false; this.err = ''; this.last = `Last check ${new Date().toTimeString().slice(0, 5)} · read ${e.talk.trim().split(/\s+/).length} words · ticked ${n} new`; await saveEntry(e); paintTicks(e);
