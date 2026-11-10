@@ -383,7 +383,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 <main id="app"></main>
 <div id="sheet"><div class="bg" data-act="close-sheet"></div><div class="body"></div></div>
 <div id="lock" class="on"><img src="icon-192.png" alt=""><h1>Travel Journal</h1><p id="lockMsg">Loading…</p>
-<form id="lockForm"><input class="hid" type="text" name="username" value="Travel Journal" autocomplete="username" tabindex="-1" aria-hidden="true"><input id="rk" type="text" placeholder="Recovery key" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" hidden><input id="pw1" type="password" name="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go"><input id="pw2" type="password" placeholder="Repeat password" autocomplete="new-password" enterkeyhint="go" hidden><button class="btn pri" id="lockBtn" type="submit">Unlock</button></form>
+<form id="lockForm"><input class="hid" type="text" name="username" value="Travel Journal" autocomplete="username" tabindex="-1" aria-hidden="true"><input id="rk" type="text" placeholder="Recovery key" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" hidden><input id="pw1" type="password" name="password" placeholder="Password" autocomplete="current-password" enterkeyhint="go"><input id="pw2" type="password" placeholder="Repeat password" autocomplete="new-password" enterkeyhint="go" hidden><label class="chk" id="lockStayRow" style="justify-content:center;font-size:14px"><input type="checkbox" id="lockStay" checked> Keep me signed in on this phone</label><button class="btn pri" id="lockBtn" type="submit">Unlock</button></form>
 <button class="btn ghost small" id="lockForgot" data-act="forgot" hidden>Forgot password?</button>
 <button class="btn ghost small" id="lockBack" data-act="back-unlock" hidden>Back</button>
 <button class="btn ghost small" id="lockErase" data-act="erase" hidden>No recovery key? Erase and start again</button>
@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-09.25'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-09.27'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1108,6 +1108,8 @@ function openSettings() {
   <div class="wrap" style="padding-top:2px">
     <section class="sec"><h2>Privacy lock</h2>
       <p class="hint" style="margin-top:0">Everything is encrypted on this phone with your password, and the journal locks after a minute away from the app.</p>
+      <label class="chk"><input type="checkbox" data-change="stay"${Lock.stay ? ' checked' : ''}> Stay signed in on this phone</label>
+      <p class="hint" style="margin-top:4px">The journal opens without the password until you tap Lock now. Anyone using your unlocked phone could then open it.</p>
       <div class="btns"><button class="btn" data-act="lock-now">Lock now</button><button class="btn" data-act="change-pw">Change password</button></div>
       <h2 style="margin-top:20px">Recovery key</h2>
       <p class="hint" style="margin-top:0">If you forget your password, “Forgot password?” on the lock screen accepts your recovery key. Making a new key cancels the old one.</p>
@@ -3016,10 +3018,7 @@ document.addEventListener('click', async ev => {
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
-    case 'sync-on': Sync.enable().then(() => openSettings()); break;
-    case 'sync-now': Sync.info = ''; Sync.run(); break;
-    case 'sync-code': Sync.showCode = !Sync.showCode; Sync.paint(); break;
-    case 'lock-now': Lock.lock(); break;
+const APP_VERSION = '2026-11-09.27'; // bump on every release; the Check for updates button compares against it
     case 'erase': Lock.erase(); break;
     case 'forgot': Lock.setMode('recover'); break;
     case 'back-unlock': Lock.setMode('unlock'); break;
@@ -3070,6 +3069,8 @@ document.addEventListener('change', async ev => {
     Vault.stt.provider = t.value; await Vault.saveStt(); openSettings();
   } else if (f === 'sttdiar') {
     Vault.stt.diar = t.checked; await Vault.saveStt();
+  } else if (f === 'stay') {
+    await Lock.keepKey(t.checked); toast(t.checked ? 'Staying signed in on this phone' : 'The journal will lock after a minute away');
   } else if (f === 'sttclean') {
     Vault.stt.cleanup = t.checked; await Vault.saveStt();
   } else if (f === 'dc') {
@@ -3106,7 +3107,7 @@ setInterval(() => { if (!document.hidden) Stt.run(); }, 30000);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { flush(); Lock.hiddenAt = Date.now(); Stt.busy.forEach(id => { Stt.hid[id] = true; }); if (Rec.active) { Rec.cut = true; Rec.stop(); } }
   else if (Rec.cut) { Rec.cut = false; toast('Recording stopped when you left the app. What you said so far was saved.'); }
-  if (!document.hidden && Lock.ready && !Lock.locked && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
+  if (!document.hidden && Lock.ready && !Lock.locked && !Lock.stay && Lock.hiddenAt && Date.now() - Lock.hiddenAt > 60000) Lock.lock();
   else if (!document.hidden) {
     if (Stt.busy.size) { Stt.hold(); if (Date.now() - Lock.hiddenAt > 5000) Object.entries(Stt.ctl).forEach(([id, c]) => { if (Stt.hid[id]) c.abort('restart'); }); } // the paused upload won't finish: send it again now
     Stt.run();
@@ -3116,12 +3117,28 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- lock screen ----------
 const Lock = {
-  mode: 'unlock', busy: false, locked: true, ready: false, hiddenAt: 0, y: 0, gen: 0,
+  mode: 'unlock', busy: false, locked: true, ready: false, hiddenAt: 0, y: 0, gen: 0, stay: false,
+  // "stay signed in": the (non-extractable) key is kept in this browser's storage so the journal opens without the password.
+  // Anyone who can open this app on an unlocked phone can then read it, so it is a choice, and Lock now always asks for the password again.
+  async keepKey(on) {
+    this.stay = !!on; lsSet('tj.stay', on ? '1' : '0');
+    try { if (on && Vault.key) await DB.putK('meta', Vault.key, 'staykey'); else await DB.del('meta', 'staykey'); } catch { this.stay = false; }
+  },
+  async autoOpen() {
+    if (lsGet('tj.stay') === '0') return false;
+    try {
+      const key = await DB.get('meta', 'staykey'), rec = await DB.get('meta', 'vault'); if (!key || !rec || !rec.wrap) return false;
+      if (!(await Vault.verify(key, rec))) { await DB.del('meta', 'staykey'); return false; }
+      Vault.use(rec, key); await Vault.loadApiKey(); await migratePlain(); await load(); this.stay = true; this.open(); return true;
+    } catch { return false; }
+  },
   async init(dbOk) {
     $('#lockForm').addEventListener('submit', ev => this.submit(ev));
     if (!dbOk) { this.setMode('setup', "Storage isn't available in this browser mode, so the journal can't open here."); $('#lockBtn').disabled = true; return; }
     this.setMode((await DB.get('meta', 'vault')) ? 'unlock' : 'setup');
+    $('#lockStay').checked = lsGet('tj.stay') !== '0';
     this.ready = true;
+    await this.autoOpen();
   },
   setMode(m, msg) {
     this.mode = m; const setup = m === 'setup', rec = m === 'recover';
@@ -3154,6 +3171,7 @@ const Lock = {
         code = r.recoveryKey || (Vault.needKey ? await Vault.newRecovery(p1) : null);
       }
       Vault.needKey = false;
+      await this.keepKey($('#lockStay').checked);
       this.open();
       if (code) showRecoveryKey(code);
     } catch (err) { this.say('Something went wrong: ' + (err.message || err.name)); }
