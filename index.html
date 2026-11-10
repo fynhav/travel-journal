@@ -692,7 +692,7 @@ async function load() {
   Sync.init();
 }
 // ---------- cloud copy: every encrypted record is also kept on the server, which only ever sees ciphertext ----------
-const SYNC_URL = /\.up\.railway\.app$/.test(location.hostname) ? location.origin : 'https://app-production-ecba.up.railway.app';
+const SYNC_URL = /(\.up\.railway\.app|^localhost)$/.test(location.hostname) ? location.origin : 'https://app-production-ecba.up.railway.app';
 const SYNC_META = ['vault', 'apikey', 'stt', 'geo'];
 const hex = u => [...u].map(b => b.toString(16).padStart(2, '0')).join('');
 function packRow(row) { // one stored row -> bytes: a small JSON header, then the raw encrypted buffers
