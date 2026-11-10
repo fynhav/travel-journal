@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-09.22'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-09.23'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -512,11 +512,11 @@ const DB = {
   req(store, mode, fn) { return new Promise((res, rej) => { const q = fn(this.db.transaction(store, mode).objectStore(store)); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); }); },
   all(s) { return this.req(s, 'readonly', o => o.getAll()); },
   get(s, k) { return this.req(s, 'readonly', o => o.get(k)); },
-  put(s, v) { return this.req(s, 'readwrite', o => o.put(v)); },
-  putK(s, v, k) { return this.req(s, 'readwrite', o => o.put(v, k)); },
-  del(s, k) { return this.req(s, 'readwrite', o => o.delete(k)); },
+  put(s, v) { Sync.mark(s, v && v.id); return this.req(s, 'readwrite', o => o.put(v)); },
+  putK(s, v, k) { Sync.mark(s, k); return this.req(s, 'readwrite', o => o.put(v, k)); },
+  del(s, k) { Sync.mark(s, k); return this.req(s, 'readwrite', o => o.delete(k)); },
   clear(s) { return this.req(s, 'readwrite', o => o.clear()); },
-  tx(ops) { return new Promise((res, rej) => { const t = this.db.transaction(['entries', 'photos', 'audio', 'meta'], 'readwrite'); ops.forEach(op => op[0] === 'clear' ? t.objectStore(op[1]).clear() : (op.length > 2 ? t.objectStore(op[0]).put(op[1], op[2]) : t.objectStore(op[0]).put(op[1]))); t.oncomplete = () => res(); t.onerror = t.onabort = () => rej(t.error || new Error('Write failed')); }); }
+  tx(ops) { ops.forEach(op => { if (op[0] !== 'clear') Sync.mark(op[0], op.length > 2 ? op[2] : op[1].id); }); return new Promise((res, rej) => { const t = this.db.transaction(['entries', 'photos', 'audio', 'meta'], 'readwrite'); ops.forEach(op => op[0] === 'clear' ? t.objectStore(op[1]).clear() : (op.length > 2 ? t.objectStore(op[0]).put(op[1], op[2]) : t.objectStore(op[0]).put(op[1]))); t.oncomplete = () => res(); t.onerror = t.onabort = () => rej(t.error || new Error('Write failed')); }); }
 };
 
 // ---------- encryption (password -> AES-GCM key; nothing readable is stored) ----------
@@ -689,7 +689,88 @@ async function load() {
     for (const e of S.entries) { e.qa.forEach(x => { x.id ||= uid(); }); if (stdNeeds(e)) { applyStd(e); await putEntry(e); } }
     lsSet('tj.std', '2');
   }
+  Sync.init();
 }
+// ---------- cloud copy: every encrypted record is also kept on the server, which only ever sees ciphertext ----------
+const SYNC_URL = /\.up\.railway\.app$/.test(location.hostname) ? location.origin : 'https://app-production-ecba.up.railway.app';
+const SYNC_META = ['vault', 'apikey', 'stt', 'geo'];
+const hex = u => [...u].map(b => b.toString(16).padStart(2, '0')).join('');
+function packRow(row) { // one stored row -> bytes: a small JSON header, then the raw encrypted buffers
+  const bufs = [], hdr = te.encode(JSON.stringify(row, (k, v) => {
+    if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) { const u = v instanceof ArrayBuffer ? new Uint8Array(v) : new Uint8Array(v.buffer, v.byteOffset, v.byteLength); bufs.push(u); return { $b: bufs.length - 1, n: u.length }; }
+    return v;
+  })), l = new Uint8Array(4); new DataView(l.buffer).setUint32(0, hdr.length);
+  return new Blob([l, hdr, ...bufs]);
+}
+function unpackRow(ab) {
+  const u = new Uint8Array(ab), hl = new DataView(ab).getUint32(0); let off = 4 + hl; const parts = [];
+  const head = JSON.parse(td.decode(u.subarray(4, 4 + hl)), (k, v) => (v && typeof v === 'object' && '$b' in v) ? (parts[v.$b] = v.n, v) : v);
+  const offs = []; for (const n of parts) { offs.push(off); off += n; }
+  const fix = o => { if (o && typeof o === 'object') { if ('$b' in o && 'n' in o) return u.slice(offs[o.$b], offs[o.$b] + o.n); for (const k in o) o[k] = fix(o[k]); } return o; };
+  return fix(head);
+}
+const Sync = {
+  cfg: null, dirty: new Set(), tags: new Map(), busy: false, err: '', last: 0, info: '', showCode: false, t: null,
+  async init() {
+    try {
+      const r = await DB.get('meta', 'sync'); this.cfg = r ? JSON.parse(td.decode(await Vault.open(r))) : null;
+      this.last = +lsGet('tj.syncLast') || 0; try { this.dirty = new Set(JSON.parse(lsGet('tj.dirty') || '[]')); } catch { this.dirty = new Set(); }
+    } catch { this.cfg = null; }
+    this.paint(); if (this.cfg) this.soon(1500);
+  },
+  mark(s, id) {
+    if (!this.cfg || id == null || (s === 'meta' && !SYNC_META.includes(id))) return;
+    const k = s + '/' + id; this.dirty.add(k); this.tags.set(k, (this.tags.get(k) || 0) + 1); lsSet('tj.dirty', JSON.stringify([...this.dirty])); this.soon(4000);
+  },
+  soon(ms) { clearTimeout(this.t); this.t = setTimeout(() => this.run(), ms); },
+  async enable() {
+    const id = hex(rand(16)), token = hex(rand(24)); this.cfg = { id, token };
+    await DB.putK('meta', await Vault.seal(te.encode(JSON.stringify(this.cfg))), 'sync');
+    for (const s of ['entries', 'photos', 'audio']) for (const k of await DB.req(s, 'readonly', o => o.getAllKeys())) this.mark(s, k);
+    for (const k of SYNC_META) if (await DB.get('meta', k)) this.mark('meta', k);
+    this.showCode = true; this.paint(); this.run();
+  },
+  async call(method, path, body) {
+    const r = await fetch(SYNC_URL + '/api/' + path, { method, body, headers: { 'x-vault': this.cfg.id, 'x-token': this.cfg.token } });
+    if (!r.ok) { const er = new Error(r.status === 401 ? 'the server did not accept this phone' : 'the server answered ' + r.status); er.status = r.status; throw er; }
+    return r;
+  },
+  async run() {
+    if (!this.cfg || this.busy || Lock.locked || !Vault.key || !navigator.onLine) return;
+    this.busy = true; this.err = ''; const gen = Lock.gen; this.paint();
+    try {
+      for (let guard = 0; this.dirty.size && guard < 20000; guard++) {
+        const batch = [...this.dirty].slice(0, 3); let moved = 0;
+        await Promise.all(batch.map(async key => {
+          const i = key.indexOf('/'), s = key.slice(0, i), id = key.slice(i + 1), tag = this.tags.get(key) || 0;
+          if (s === 'audio' && S.audio.some(a => a.id === id && a.status === 'recording')) return; // still being recorded: wait until it is saved
+          const row = await DB.get(s, id), q = `put/${s}/${encodeURIComponent(id)}?ver=${Date.now()}`;
+          await this.call('PUT', row ? q : q + '&deleted=1', row ? packRow(row) : new Blob([]));
+          if ((this.tags.get(key) || 0) === tag) this.dirty.delete(key); moved++;
+        }));
+        lsSet('tj.dirty', JSON.stringify([...this.dirty])); this.paint();
+        if (!moved || Lock.gen !== gen) break;
+      }
+      if (!this.dirty.size) { this.last = Date.now(); lsSet('tj.syncLast', String(this.last)); await this.verify(); }
+    } catch (e) { this.err = (e && e.message) || 'no connection'; }
+    finally { this.busy = false; this.paint(); if (this.cfg && (this.err || this.dirty.size)) this.soon(this.err ? 30000 : 15000); }
+  },
+  async verify() { // does the server hold what this phone holds?
+    try {
+      const st = await (await this.call('GET', 'stats')).json(), n = {}; st.stores.forEach(x => { n[x.store] = x; });
+      const loc = {}; for (const s of ['entries', 'photos']) loc[s] = (await DB.req(s, 'readonly', o => o.getAllKeys())).length;
+      const ok = (n.entries ? n.entries.n : 0) === loc.entries && (n.photos ? n.photos.n : 0) === loc.photos, mb = Object.values(n).reduce((a, x) => a + x.bytes, 0) / 1048576;
+      this.info = `${loc.entries} chapters, ${loc.photos} photos on this phone · ${n.entries ? n.entries.n : 0} chapters, ${n.photos ? n.photos.n : 0} photos in the cloud (${mb.toFixed(1)} MB) ${ok ? '✓ matches' : '⚠︎ differs'}`;
+    } catch { this.info = ''; }
+  },
+  paint() {
+    const el = $('#syncst'); if (!el) return;
+    el.innerHTML = !this.cfg ? 'Off. Nothing leaves this phone except to the services you set up.' :
+      this.busy ? `Saving to the cloud… ${this.dirty.size} left` : this.err ? `Could not reach the cloud: ${esc(this.err)}. Trying again soon (${this.dirty.size} waiting).` :
+      this.dirty.size ? `${this.dirty.size} waiting to be saved` : `Saved${this.last ? ' ' + new Date(this.last).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}.${this.info ? '<br>' + esc(this.info) : ''}`;
+    const c = $('#synccode'); if (c) c.innerHTML = this.cfg && this.showCode ? `<p class="hint">Your sync code. Keep it in your password manager; with it, your password and your recovery key the journal can be restored on a new phone.</p><code style="user-select:all;word-break:break-all;display:block;font-size:12px;background:#F1EADC;padding:8px;border-radius:10px">${esc(this.cfg.id + '.' + this.cfg.token)}</code>` : '';
+  }
+};
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 
@@ -1051,6 +1132,10 @@ function openSettings() {
       ${Store.p === false ? '<p class="hint" style="margin-top:0">If the phone runs very low on space, Safari may clear app data. Keep an iCloud backup.</p>' : ''}
       <p class="hint" style="margin-top:14px">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive. Backups are encrypted, so you'll need your password to restore one.</p>
       <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" data-change="restore" hidden></label></div></section>
+    <section class="sec"><h2>Cloud copy</h2>
+      <p class="hint" style="margin-top:0">An encrypted copy of the journal is kept on your own server, so losing this phone cannot lose the journal. The server only ever sees scrambled data.</p>
+      <p class="hint" id="syncst" style="color:var(--ink)"></p><div id="synccode"></div>
+      <div class="btns">${Sync.cfg ? '<button class="btn pri" data-act="sync-now">Save now</button><button class="btn" data-act="sync-code">Show sync code</button>' : '<button class="btn pri" data-act="sync-on">Turn on cloud copy</button>'}</div></section>
     <section class="sec"><h2>The book</h2>
       <p class="hint" style="margin-top:0">Every chapter, all photos and a prompt for Claude, in one zip. This one is not encrypted, so it can be read by Claude.</p>
       <div class="btns"><button class="btn" data-act="export-book">Export whole book</button></div></section>
@@ -1059,7 +1144,7 @@ function openSettings() {
       <div class="btns"><button class="btn" data-act="check-update">Check for updates</button></div><p class="hint" id="updMsg"></p></section>
     <div class="btns end"><button class="btn pri" data-act="close-sheet" style="flex:1">Done</button></div>
   </div>`, true);
-  $('#sheet .body').scrollTop = keep;
+  $('#sheet .body').scrollTop = keep; Sync.paint();
 }
 const SW = {
   ok: 'serviceWorker' in navigator, last: 0, opened: Date.now(),
@@ -2931,6 +3016,9 @@ document.addEventListener('click', async ev => {
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
+    case 'sync-on': Sync.enable().then(() => openSettings()); break;
+    case 'sync-now': Sync.info = ''; Sync.run(); break;
+    case 'sync-code': Sync.showCode = !Sync.showCode; Sync.paint(); break;
     case 'lock-now': Lock.lock(); break;
     case 'erase': Lock.erase(); break;
     case 'forgot': Lock.setMode('recover'); break;
@@ -3012,7 +3100,7 @@ document.addEventListener('change', async ev => {
 })();
 document.addEventListener('keydown', ev => { if (ev.target.id === 'countryIn' && ev.key === 'Enter') { ev.preventDefault(); addCountry(); } if (ev.target.id === 'viaIn' && ev.key === 'Enter') { ev.preventDefault(); $('[data-act="via-ok"]')?.click(); } });
 window.addEventListener('pagehide', () => { flush(); if (Rec.active) { Rec.cut = true; Rec.stop(); } });
-window.addEventListener('online', () => { Stt.run(); Cover.retryAll(); paintVoice(); SW.check(true); if (MapV.alive) MapV.fetchPending(); });
+window.addEventListener('online', () => { Sync.run(); Stt.run(); Cover.retryAll(); paintVoice(); SW.check(true); if (MapV.alive) MapV.fetchPending(); });
 window.addEventListener('offline', () => { paintVoice(); Rec.overlay(); });
 setInterval(() => { if (!document.hidden) Stt.run(); }, 30000);
 document.addEventListener('visibilitychange', () => {
