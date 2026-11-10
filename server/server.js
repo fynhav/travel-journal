@@ -1,6 +1,7 @@
 // Travel Journal: serves the app and keeps an encrypted copy of the journal.
 // The phone encrypts every record before it is sent, so this server only ever stores ciphertext.
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
+const zlib = require('zlib');
 const { Pool } = require('pg');
 const ROOT = path.join(__dirname, '..'), PORT = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === '1' ? { rejectUnauthorized: false } : undefined, max: 5 });
@@ -19,6 +20,7 @@ async function init() {
 }
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const safeEq = (a, b) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+const FILE_CACHE = new Map(), COMPRESSIBLE = new Set(['.html', '.js', '.json', '.webmanifest', '.css', '.svg']);
 const send = (res, code, body, headers = {}) => { res.writeHead(code, { 'cache-control': 'no-store', ...headers }); res.end(body); };
 const json = (res, code, o) => send(res, code, JSON.stringify(o), { 'content-type': 'application/json' });
 const body = req => new Promise((ok, no) => { const c = []; let n = 0; req.on('data', d => { n += d.length; if (n > MAX_BODY) { no(new Error('too big')); req.destroy(); } else c.push(d); }); req.on('end', () => ok(Buffer.concat(c))); req.on('error', no); });
@@ -73,7 +75,7 @@ async function api(req, res, url) {
 
 http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, 'http://x');
+    const url = new URL(req.url.replace(/^\/{2,}/, '/'), 'http://x');
     if (url.pathname.startsWith('/api/')) {
       res.setHeader('access-control-allow-origin', '*'); res.setHeader('access-control-allow-headers', 'x-vault,x-token,content-type'); res.setHeader('access-control-allow-methods', 'GET,PUT,OPTIONS');
       if (req.method === 'OPTIONS') return send(res, 204, '');
@@ -83,7 +85,22 @@ http.createServer(async (req, res) => {
     if (f.startsWith('vendor/')) { if (f.includes('..')) f = ''; } else if (!STATIC.has(f)) f = 'index.html';
     const fp = path.join(ROOT, f);
     if (!f || !fp.startsWith(ROOT) || !fs.existsSync(fp)) return send(res, 404, 'not found');
-    send(res, 200, fs.readFileSync(fp), { 'content-type': MIME[path.extname(fp)] || 'application/octet-stream', 'cache-control': f === 'sw.js' || f === 'index.html' ? 'no-cache' : 'public, max-age=3600' });
+    const ext = path.extname(fp), st = fs.statSync(fp), ck = f + ':' + st.mtimeMs + ':' + st.size;
+    let ent = FILE_CACHE.get(ck);
+    if (!ent) {
+      const raw = fs.readFileSync(fp), z = COMPRESSIBLE.has(ext) && raw.length > 1024;
+      ent = { raw, etag: '"' + crypto.createHash('sha1').update(raw).digest('base64url').slice(0, 20) + '"',
+        br: z ? zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }) : null,
+        gz: z ? zlib.gzipSync(raw, { level: 9 }) : null };
+      FILE_CACHE.set(ck, ent);
+    }
+    const ae = String(req.headers['accept-encoding'] || ''), enc = ent.br && /\bbr\b/.test(ae) ? 'br' : ent.gz && /\bgzip\b/.test(ae) ? 'gzip' : '';
+    const body = enc === 'br' ? ent.br : enc === 'gzip' ? ent.gz : ent.raw;
+    const h = { 'content-type': MIME[ext] || 'application/octet-stream', 'cache-control': f === 'sw.js' || f === 'index.html' ? 'no-cache' : 'public, max-age=3600', etag: ent.etag.slice(0, -1) + (enc ? '-' + enc : '') + '"', vary: 'Accept-Encoding' };
+    if (enc) h['content-encoding'] = enc;
+    if (req.headers['if-none-match'] === h.etag) { res.writeHead(304, h); return res.end(); }
+    h['content-length'] = body.length;
+    res.writeHead(200, h); res.end(req.method === 'HEAD' ? undefined : body);
   } catch (e) { console.error(e); if (!res.headersSent) json(res, 500, { error: 'server error' }); }
 }).listen(PORT, () => console.log('listening', PORT));
 init().then(() => console.log('db ready')).catch(e => { console.error('db init failed', e); process.exit(1); });
