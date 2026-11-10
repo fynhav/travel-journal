@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-09.20'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-09.21'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1706,7 +1706,7 @@ const Rec = {
     ${talk ? `<div class="cl"><div class="clh">Cover as you go <small>${live ? 'ticks appear as you talk' : 'ticks appear once you have signal'}</small></div><div id="cvs" style="font-size:12.5px;color:#8A5A2B;padding:2px 0 6px"></div>${e.qa.map((x, i) => qRow(x, i, false)).join('')}</div>` : ''}
     <div class="lw"></div>
     <div class="offnote">${ico('off', 22, '#6B5F50')}<div><b>Safe on this phone.</b> Every few seconds your voice is saved, encrypted. No signal? It waits and turns into text by itself when you are back online.${Stt.ready() ? '' : ' Add a transcription key in Settings to turn it into text.'}</div></div>`;
-    o.classList.add('on'); this.paintLive();
+    o.classList.add('on'); this.paintLive(); Cover.last = ''; Cover.paint();
   },
   stop() { if (this.active && !this.stopping) { this.stopping = true; const mr = this.cur && this.cur.mr; if (mr && mr.state !== 'inactive') mr.stop(); } },
   async finish() {
@@ -1734,7 +1734,7 @@ const Cover = {
   busy: new Set(), again: new Set(),
   can: () => !!(Vault.key && Vault.apiKey && navigator.onLine),
   err: '',
-  paint() { const el = $('#cvs'); if (el) el.textContent = this.busy.size ? 'Checking what you have covered…' : this.err ? 'Could not tick yet: ' + this.err + '. Trying again with the next part.' : ''; },
+  paint() { const el = $('#cvs'); if (el) el.textContent = this.busy.size ? 'Checking what you have covered…' : this.err ? 'Could not tick yet: ' + this.err + '. Trying again with the next part.' : this.last ? this.last : 'Waiting for the first part of your story to be turned into text…'; },
   async check(e, manual) {
     if (!e) return;
     if (!(e.talk || '').trim()) { if (manual) toast('Record or type your story first'); return; }
@@ -1752,7 +1752,7 @@ const Cover = {
       const m = out.match(/\[[\d,\s]*\]/), ids = m ? JSON.parse(m[0]) : null;
       if (!ids) throw new Error('Claude gave an answer I could not read');
       let n = 0; for (const k of ids) { const x = open[k - 1]; if (x && !x.man && !x.done) { x.done = true; n++; } }
-      e.needCheck = false; this.err = ''; await saveEntry(e); paintTicks(e);
+      e.needCheck = false; this.err = ''; this.last = `Last check ${new Date().toTimeString().slice(0, 5)} · read ${e.talk.trim().split(/\s+/).length} words · ticked ${n} new`; await saveEntry(e); paintTicks(e);
       if (manual) toast(n ? `Ticked ${n} ${n > 1 ? 'prompts' : 'prompt'}` : 'Nothing more matched what you said yet');
     } catch (er) { this.err = (er && er.message) || 'no answer'; if (manual) toast(this.err); if (!e.needCheck) { e.needCheck = true; try { await saveEntry(e); } catch {} } }
     finally { this.busy.delete(e.id); this.paint(); if (this.again.delete(e.id)) this.check(e); }
