@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-08.19'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-09.20'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -968,7 +968,7 @@ function entryHTML(e) {
   if (tab === 'prompts') {
     const old = e.qa.map((x, i) => [x, i]).filter(([x]) => x.a.trim());
     body = `<div class="cd" style="padding-top:6px"><div class="clh" style="font-size:11.5px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;padding:10px 0 2px">Things to cover <small style="text-transform:none;letter-spacing:0;font-weight:500">ticks appear as you talk, or tap to tick by hand</small></div><div id="coverList">${e.qa.map((x, i) => qRow(x, i, true)).join('') || '<p class="hint">No questions yet.</p>'}</div></div>
-    <div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q"${e.qa.some(x => x.kind === 'smart' && !x.done && !x.a.trim()) ? ' data-redo="1">↻ New questions' : '>✨ Smart questions'}</button><button class="btn" data-act="own-q">+ My own</button></div>
+    <div class="btns">${stdNeeds(e) ? '<button class="btn" data-act="std-q">Use standard prompts</button>' : ''}<button class="btn" data-act="more-q">+ Another question</button><button class="btn" data-act="smart-q"${e.qa.some(x => x.kind === 'smart' && !x.done && !x.a.trim()) ? ' data-redo="1">↻ New questions' : '>✨ Smart questions'}</button><button class="btn" data-act="own-q">+ My own</button>${e.talk.trim() && e.qa.some(x => !x.done && !x.man) ? '<button class="btn" data-act="cover-now">✓ Tick what I\'ve covered</button>' : ''}</div>
     <div class="cd story-box"><div class="q" style="margin-bottom:6px">Your story</div><textarea data-field="talk" placeholder="Tap Record and tell it in your own words, or type here…">${esc(e.talk)}</textarea><div class="voice" data-t="talk"></div></div>
     ${old.length ? `<details class="earlier"><summary>Earlier answers (${old.length})</summary>${old.map(([x, i]) => `<div class="cd"><div class="q" style="margin-bottom:6px">${esc(x.q || 'Your own heading')}</div><textarea data-field="qa" data-i="${i}">${esc(x.a)}</textarea></div>`).join('')}</details>` : ''}`;
   } else if (tab === 'photos') {
@@ -1611,7 +1611,7 @@ const Stt = {
   }
 };
 const BARS = 36;
-let SEG_MS = 45000; // a recording is saved as parts of this length, each stored and turned into text on its own
+let SEG_MS = 20000; // a recording is saved as parts of this length, each stored and turned into text on its own
 const Rec = {
   active: false, stopping: false, stream: null, wl: null, t0: 0, tick: 0, entryId: '', t: '', rid: '', seq: 0, mime0: '', done: Promise.resolve(), res: null, cut: false, drop: false,
   cur: null, seal: Promise.resolve(), kept: 0, lost: [], ac: null, an: null, buf: null, lv: [],
@@ -1703,7 +1703,7 @@ const Rec = {
     <div class="wv" role="img" aria-label="Live sound level" style="margin-top:14px">${'<i></i>'.repeat(BARS)}</div>
     <div class="tm" style="font-size:38px">0:00</div><div class="live"><i></i>Recording · saved as you talk</div>
     <button class="stopbtn" data-act="rec-stop" aria-label="Stop recording" style="margin-top:14px"><span><i></i></span></button>
-    ${talk ? `<div class="cl"><div class="clh">Cover as you go <small>${live ? 'ticks appear as you talk' : 'ticks appear once you have signal'}</small></div>${e.qa.map((x, i) => qRow(x, i, false)).join('')}</div>` : ''}
+    ${talk ? `<div class="cl"><div class="clh">Cover as you go <small>${live ? 'ticks appear as you talk' : 'ticks appear once you have signal'}</small></div><div id="cvs" style="font-size:12.5px;color:#8A5A2B;padding:2px 0 6px"></div>${e.qa.map((x, i) => qRow(x, i, false)).join('')}</div>` : ''}
     <div class="lw"></div>
     <div class="offnote">${ico('off', 22, '#6B5F50')}<div><b>Safe on this phone.</b> Every few seconds your voice is saved, encrypted. No signal? It waits and turns into text by itself when you are back online.${Stt.ready() ? '' : ' Add a transcription key in Settings to turn it into text.'}</div></div>`;
     o.classList.add('on'); this.paintLive();
@@ -1733,23 +1733,29 @@ const Rec = {
 const Cover = {
   busy: new Set(), again: new Set(),
   can: () => !!(Vault.key && Vault.apiKey && navigator.onLine),
-  async check(e) {
-    if (!e || !e.talk.trim()) return;
+  err: '',
+  paint() { const el = $('#cvs'); if (el) el.textContent = this.busy.size ? 'Checking what you have covered…' : this.err ? 'Could not tick yet: ' + this.err + '. Trying again with the next part.' : ''; },
+  async check(e, manual) {
+    if (!e) return;
+    if (!(e.talk || '').trim()) { if (manual) toast('Record or type your story first'); return; }
     const open = e.qa.filter(x => !x.done && !x.man && x.q.trim());
-    if (!open.length) { if (e.needCheck) { e.needCheck = false; saveEntry(e); } return; }
+    if (!open.length) { if (e.needCheck) { e.needCheck = false; saveEntry(e); } if (manual) toast('Everything is already ticked'); return; }
     if (this.busy.has(e.id)) { this.again.add(e.id); return; }
-    if (!this.can()) { if (!e.needCheck) { e.needCheck = true; saveEntry(e); } return; }
-    this.busy.add(e.id); const gen = Lock.gen;
+    if (!this.can()) { if (!e.needCheck) { e.needCheck = true; saveEntry(e); } if (manual) toast(!Vault.apiKey ? 'Add your Anthropic API key in Settings first' : 'You need signal for this'); return; }
+    this.busy.add(e.id); this.paint(); const gen = Lock.gen;
     try {
-      const out = await claudeText(`You check which questions a traveller has talked about while telling the story of a trip chapter. You get a numbered list of questions and the transcript so far (dictated, so expect typos). Reply with only a JSON array of the numbers of the questions the transcript clearly talks about or answers, for example [1,3]. A question counts when the traveller says something real about that topic, even briefly; a passing word does not count. Reply [] if none.`,
-        `Questions:\n${open.map((x, i) => `${i + 1}. ${x.q}`).join('\n')}\n\nTranscript:\n${e.talk.trim().slice(-12000)}`, 120, MODEL, 'Ticking questions');
+      const sys = `You check which questions a traveller has talked about while telling the story of a trip chapter. You get a numbered list of questions and the transcript so far (dictated, so expect typos, and it may be in any language). Reply with only a JSON array of the numbers of the questions the transcript talks about or answers, for example [1,3]. Be generous: a question counts when the traveller says anything real about that topic, even in a sentence, and it does not need to be the exact words of the question. Only skip a question when the topic never comes up. Reply [] if none.`,
+        usr = `Questions:\n${open.map((x, i) => `${i + 1}. ${x.q}`).join('\n')}\n\nTranscript:\n${e.talk.trim().slice(-12000)}`;
+      let out; try { out = await claudeText(sys, usr, 120, MODEL, 'Ticking questions'); }
+      catch (er) { if (er.status === 400 || er.status === 404) out = await claudeText(sys, usr, 120, STORY_MODEL, 'Ticking questions'); else throw er; } // if the quick model is not available on this key, use the other one
       if (Lock.gen !== gen) return;
       const m = out.match(/\[[\d,\s]*\]/), ids = m ? JSON.parse(m[0]) : null;
-      if (!ids) throw new Error('unreadable');
-      for (const n of ids) { const x = open[n - 1]; if (x && !x.man && !x.done) x.done = true; }
-      e.needCheck = false; await saveEntry(e); paintTicks(e);
-    } catch { if (!e.needCheck) { e.needCheck = true; try { await saveEntry(e); } catch {} } }
-    finally { this.busy.delete(e.id); if (this.again.delete(e.id)) this.check(e); }
+      if (!ids) throw new Error('Claude gave an answer I could not read');
+      let n = 0; for (const k of ids) { const x = open[k - 1]; if (x && !x.man && !x.done) { x.done = true; n++; } }
+      e.needCheck = false; this.err = ''; await saveEntry(e); paintTicks(e);
+      if (manual) toast(n ? `Ticked ${n} ${n > 1 ? 'prompts' : 'prompt'}` : 'Nothing more matched what you said yet');
+    } catch (er) { this.err = (er && er.message) || 'no answer'; if (manual) toast(this.err); if (!e.needCheck) { e.needCheck = true; try { await saveEntry(e); } catch {} } }
+    finally { this.busy.delete(e.id); this.paint(); if (this.again.delete(e.id)) this.check(e); }
   },
   retryAll() { if (this.can()) for (const e of S.entries) if (e.needCheck) this.check(e); }
 };
@@ -2880,6 +2886,7 @@ document.addEventListener('click', async ev => {
       break;
     }
     case 'rec-next': startRec(e, S.tab === 'notes' ? 'notes' : 'talk'); break;
+    case 'cover-now': { Cover.check(e, true); break; }
     case 'tick': { const x = e.qa[+t.dataset.i]; if (x) { x.done = !x.done; x.man = true; saveEntry(e); paintTicks(e); } break; }
     case 'rec-rescue': if (Rec.rescue) await shareOrDownload(Rec.rescue.map((b, i) => new File([b], 'voice-note' + (Rec.rescue.length > 1 ? '-' + (i + 1) : '') + '.' + (/mp4/.test(b.type) ? 'm4a' : /ogg/.test(b.type) ? 'ogg' : 'webm'), { type: b.type })), 'Voice note'); break;
     case 'rec-discard': if (confirm('Discard this recording? Parts already turned into text stay in your story.')) { Rec.drop = true; Rec.stop(); } break;
