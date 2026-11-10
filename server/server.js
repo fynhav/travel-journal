@@ -47,7 +47,7 @@ async function api(req, res, url) {
     if (!STORES.has(store) || !id || id.length > 200) return json(res, 400, { error: 'bad record' });
     const data = del ? null : await body(req);
     const r = await pool.query(`INSERT INTO records (vault, store, id, ver, deleted, data) VALUES ($1,$2,$3,$4,$5,$6)
-      ON CONFLICT (vault, store, id) DO UPDATE SET ver=EXCLUDED.ver, deleted=EXCLUDED.deleted, data=EXCLUDED.data, updated=now(), seq=nextval('records_seq_seq'::regclass)
+      ON CONFLICT (vault, store, id) DO UPDATE SET ver=EXCLUDED.ver, deleted=EXCLUDED.deleted, data=COALESCE(EXCLUDED.data, records.data), updated=now(), seq=nextval('records_seq_seq'::regclass)
       WHERE records.ver < EXCLUDED.ver RETURNING seq`, [vault, store, id, ver, del, data]);
     return json(res, 200, { stored: r.rowCount === 1 });
   }
@@ -60,7 +60,7 @@ async function api(req, res, url) {
   // GET /api/get/:store/:id -> ciphertext
   if (p[0] === 'get') {
     const r = await pool.query('SELECT data, deleted FROM records WHERE vault=$1 AND store=$2 AND id=$3', [vault, p[1], decodeURIComponent(p[2] || '')]);
-    if (!r.rows.length || r.rows[0].deleted) return json(res, 404, { error: 'not found' });
+    if (!r.rows.length || r.rows[0].deleted || !r.rows[0].data) return json(res, 404, { error: 'not found' });
     return send(res, 200, r.rows[0].data, { 'content-type': 'application/octet-stream' });
   }
   // GET /api/stats -> counts, so the app can show "N chapters, M photos safe"
