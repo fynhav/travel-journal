@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-09.21'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-09.22'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1738,7 +1738,7 @@ const Cover = {
   async check(e, manual) {
     if (!e) return;
     if (!(e.talk || '').trim()) { if (manual) toast('Record or type your story first'); return; }
-    const open = e.qa.filter(x => !x.done && !x.man && x.q.trim());
+    const open = e.qa.filter(x => !x.done && (manual || !x.man) && x.q.trim()); // pressing the button overrides prompts you once unticked by hand
     if (!open.length) { if (e.needCheck) { e.needCheck = false; saveEntry(e); } if (manual) toast('Everything is already ticked'); return; }
     if (this.busy.has(e.id)) { this.again.add(e.id); return; }
     if (!this.can()) { if (!e.needCheck) { e.needCheck = true; saveEntry(e); } if (manual) toast(!Vault.apiKey ? 'Add your Anthropic API key in Settings first' : 'You need signal for this'); return; }
@@ -1751,9 +1751,9 @@ const Cover = {
       if (Lock.gen !== gen) return;
       const m = out.match(/\[[\d,\s]*\]/), ids = m ? JSON.parse(m[0]) : null;
       if (!ids) throw new Error('Claude gave an answer I could not read');
-      let n = 0; for (const k of ids) { const x = open[k - 1]; if (x && !x.man && !x.done) { x.done = true; n++; } }
+      let n = 0; for (const k of ids) { const x = open[k - 1]; if (x && (manual || !x.man) && !x.done) { x.done = true; x.man = false; n++; } }
       e.needCheck = false; this.err = ''; this.last = `Last check ${new Date().toTimeString().slice(0, 5)} · read ${e.talk.trim().split(/\s+/).length} words · ticked ${n} new`; await saveEntry(e); paintTicks(e);
-      if (manual) toast(n ? `Ticked ${n} ${n > 1 ? 'prompts' : 'prompt'}` : 'Nothing more matched what you said yet');
+      if (manual) toast(n ? `Ticked ${n} ${n > 1 ? 'prompts' : 'prompt'}` : `Read ${e.talk.trim().split(/\s+/).length} words, nothing more matched`);
     } catch (er) { this.err = (er && er.message) || 'no answer'; if (manual) toast(this.err); if (!e.needCheck) { e.needCheck = true; try { await saveEntry(e); } catch {} } }
     finally { this.busy.delete(e.id); this.paint(); if (this.again.delete(e.id)) this.check(e); }
   },
