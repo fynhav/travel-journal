@@ -8,7 +8,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json', '.css': 'text/css' };
 const STATIC = new Set(['index.html', 'sw.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png']);
 const STORES = new Set(['entries', 'photos', 'audio', 'meta']);
-const MAX_BODY = 25 * 1024 * 1024;
+const MAX_BODY = 200 * 1024 * 1024; // a 150 MB video plus overhead
 
 async function init() {
   await pool.query(`CREATE TABLE IF NOT EXISTS vaults (id text PRIMARY KEY, token_hash text NOT NULL, created timestamptz NOT NULL DEFAULT now())`);
