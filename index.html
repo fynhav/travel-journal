@@ -140,6 +140,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .photos{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .ph{aspect-ratio:1;border-radius:16px;overflow:hidden;border:0;padding:0;background:var(--line);cursor:pointer;position:relative}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .play{position:absolute;left:6px;top:6px;background:rgba(46,40,35,.62);color:#fff;border-radius:999px;font-size:10px;line-height:1;padding:5px 8px;display:flex;gap:5px;align-items:center}.ph .play i{font-style:normal;font-weight:600}
 .ph .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(46,40,35,.6));color:#fff;font-size:10.5px;padding:10px 6px 4px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .add-ph{display:flex;align-items:center;justify-content:center;flex-direction:column;background:var(--paper);border:1.5px dashed #D9CBB0;color:var(--muted);font-size:13px}
 .add-ph span:first-child{font-size:26px;line-height:1}
@@ -362,6 +363,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 #sheet .pact{display:flex;gap:10px;margin-top:14px;padding-top:16px;border-top:1px solid #F0E8D8}
 #sheet .pact .btn{height:48px;margin:0}
 #sheet .pact .pri{flex:1}
+video.big{width:100%;max-height:45vh;border-radius:16px;background:var(--paper);display:block}
 img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;background:var(--paper);display:block}
 #lock{position:fixed;inset:0;z-index:100;background:var(--paper);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px}
 #lock.on{display:flex}
@@ -396,7 +398,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-15.28'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-15.29'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -492,7 +494,7 @@ function pal(name) {
 function tint(name) { const p = pal(name); return [p.bg, p.bd]; }
 const flagOf = n => { const c = CODES[(n || '').trim().toLowerCase()]; return c ? String.fromCodePoint(...[...c].map(x => 127397 + x.charCodeAt(0))) : '🌍'; };
 const codeOf = n => CODES[(n || '').trim().toLowerCase()] || (n || '').trim().slice(0, 3).toUpperCase() || '–';
-function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2800); }
+function toast(m, ms = 2800) { const t = $('#toast'); t.textContent = m; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), ms); }
 function autosize(t) { t.style.height = 'auto'; t.style.height = Math.max(t.dataset.field === 'talk' ? 170 : t.closest('.cd') ? 52 : 84, t.scrollHeight + 2) + 'px'; }
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(b); });
 function downloadBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
@@ -656,7 +658,7 @@ async function encPhoto(p, key = Vault.key) {
 }
 async function decPhoto(r) {
   const meta = JSON.parse(td.decode(await Vault.open(r))), bytes = await Vault.open({ iv: r.biv, ct: r.bct });
-  return { ...meta, blob: new Blob([bytes], { type: 'image/jpeg' }) };
+  return { ...meta, blob: new Blob([bytes], { type: meta.mime || 'image/jpeg' }) };
 }
 async function encAudio(m, blob, key = Vault.key) {
   const a = await Vault.seal(te.encode(JSON.stringify(m)), key), b = await Vault.seal(await blob.arrayBuffer(), key);
@@ -718,7 +720,8 @@ function paintStore() {
   $$('.storeBar').forEach(el => { el.style.width = Store.ok ? Math.max(2, Math.min(100, Store.u / Store.q * 100)) + '%' : '0'; });
 }
 const urls = new Map();
-const purl = p => { if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); };
+const purl = p => { if (p.kind === 'video') return p.poster; if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); }; // videos show their poster frame wherever a photo would
+const vurl = p => { const k = 'v' + p.id; if (!urls.has(k)) urls.set(k, URL.createObjectURL(p.blob)); return urls.get(k); };
 const cur = () => S.entries.find(x => x.id === S.openId);
 const entryOn = d => S.entries.find(e => e.start <= d && d <= e.end);
 const overlaps = (a, b, except) => S.entries.some(x => x.id !== except && x.start <= b && a <= x.end);
@@ -727,7 +730,7 @@ const chapterNo = e => chapters().indexOf(e) + 1;
 const countryLabel = e => e.countries.join(' → ');
 const flagLabel = e => e.countries.map(c => flagOf(c) + ' ' + c).join(' → ');
 const photosOf = e => S.photos.filter(p => p.entryId === e.id).sort((a, b) => a.day === b.day ? a.added - b.added : (a.day < b.day ? -1 : 1));
-const photoName = (n, j, p) => `ch${pad2(n)}-${pad2(j + 1)}-${p.day}.jpg`;
+const photoName = (n, j, p) => `ch${pad2(n)}-${pad2(j + 1)}-${p.day}.${p.kind === 'video' ? (/quicktime/.test(p.mime) ? 'mov' : 'mp4') : 'jpg'}`;
 function pickFixed(n, used) { const pool = FIXED.filter(q => !used.includes(q)); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } return pool.slice(0, n); }
 
 const timers = new Map();
@@ -972,7 +975,7 @@ function entryHTML(e) {
     <div class="cd story-box"><div class="q" style="margin-bottom:6px">Your story</div><textarea data-field="talk" placeholder="Tap Record and tell it in your own words, or type here…">${esc(e.talk)}</textarea><div class="voice" data-t="talk"></div></div>
     ${old.length ? `<details class="earlier"><summary>Earlier answers (${old.length})</summary>${old.map(([x, i]) => `<div class="cd"><div class="q" style="margin-bottom:6px">${esc(x.q || 'Your own heading')}</div><textarea data-field="qa" data-i="${i}">${esc(x.a)}</textarea></div>`).join('')}</details>` : ''}`;
   } else if (tab === 'photos') {
-    body = `<section class="sec"><div class="photos">${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}<label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*" multiple data-change="photos" hidden></label></div></section>`;
+    body = `<section class="sec"><div class="photos">${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.kind === 'video' ? `<span class="play" aria-label="Video">▶${p.dur ? `<i>${Math.round(p.dur)}s</i>` : ''}</span>` : ''}${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}<label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*,video/*" multiple data-change="photos" hidden></label></div></section>`;
   } else if (tab === 'notes') {
     body = `<div class="cd"><div class="q" style="margin-bottom:6px">Anything else</div><textarea data-field="notes" placeholder="Free notes…">${esc(e.notes)}</textarea><div class="voice" data-t="notes"></div></div>`;
   } else {
@@ -992,18 +995,18 @@ function entryHTML(e) {
   const c0 = e.countries[0];
   return `<header class="top c"><div class="row"><button class="cbtn" data-act="back" aria-label="Back to calendar">${ico('back', 20)}</button><div class="tt"><div class="eyebrow">Chapter ${n}</div><h1>${esc(chTitle(e) || 'New chapter')}</h1></div><button class="cbtn" data-act="more" aria-label="More">${ico('dots', 20, '#2E2823', 0)}</button></div></header>
   <div class="wrap" style="padding-top:0">
-    <div class="hero big">${cover(e)}<div class="hp l">${c0 ? flagOf(c0) + ' ' + esc(e.countries.join(' → ')) : 'No country yet'}</div><label class="hp r">${ps.length} photo${ps.length === 1 ? '' : 's'}<span class="plus">${ico('plus', 13, '#fff', 3)}</span><input type="file" accept="image/*" multiple data-change="photos" hidden></label></div>
+    <div class="hero big">${cover(e)}<div class="hp l">${c0 ? flagOf(c0) + ' ' + esc(e.countries.join(' → ')) : 'No country yet'}</div><label class="hp r">${ps.length} photo${ps.length === 1 ? '' : 's'}<span class="plus">${ico('plus', 13, '#fff', 3)}</span><input type="file" accept="image/*,video/*" multiple data-change="photos" hidden></label></div>
   </div>
   <div class="meta"><div style="flex:1;min-width:0"><div class="ml"><button class="dedit" data-act="dates" aria-label="Change dates">${rangeLabel(e.start, e.end)} · ${days.length} day${days.length > 1 ? 's' : ''} <span>${ico('pen', 14)}</span></button></div><div class="ms">${mine.length ? esc(mine.join(' · ')) : 'No place yet'}</div></div><div class="prog"><div class="pt">${answered} of ${e.qa.length} covered</div><div class="pb"><i style="width:${pct}%"></i></div></div></div>
   <div class="tools"><button class="tbtn solid" data-act="story">${e.story ? '📖 Read story' : '✨ Create story'}</button></div>
   <div class="tabs">${[['prompts', 'Prompts'], ['photos', 'Photos'], ['notes', 'Notes'], ['where', 'Where']].map(([k, l]) => `<button class="pill${tab === k ? ' on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div>
   <div class="wrap" style="padding-top:0">${body}</div>
-  <nav class="nav bar" aria-label="Chapter actions"><button class="recbtn" data-act="rec-next">${ico('mic', 20, '#fff', 2.2)}${S.tab === 'notes' ? 'Record note' : 'Record story'}</button><label class="circ" aria-label="Add photos">${ico('img')}<input type="file" accept="image/*" multiple data-change="photos" hidden></label><button class="circ" data-act="map" aria-label="Trip map">${ico('map')}</button><button class="circ" data-act="share" aria-label="Send chapter to Claude">${ico('send')}</button></nav>`;
+  <nav class="nav bar" aria-label="Chapter actions"><button class="recbtn" data-act="rec-next">${ico('mic', 20, '#fff', 2.2)}${S.tab === 'notes' ? 'Record note' : 'Record story'}</button><label class="circ" aria-label="Add photos">${ico('img')}<input type="file" accept="image/*,video/*" multiple data-change="photos" hidden></label><button class="circ" data-act="map" aria-label="Trip map">${ico('map')}</button><button class="circ" data-act="share" aria-label="Send chapter to Claude">${ico('send')}</button></nav>`;
 }
 
 // ---------- sheet ----------
 function openSheet(html, full) { const sh = $('#sheet'); sh.classList.toggle('full', !!full); $('#sheet .body').innerHTML = html; sh.classList.add('on'); if (!full) $('#sheet .body').scrollTop = 0; $$('#sheet textarea').forEach(autosize); }
-function closeSheet() { if (keyPending) return; if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on', 'full'); if (S.view === 'entry') rerender(); }
+function closeSheet() { if (keyPending) return; $$('#sheet video').forEach(v => v.pause()); if (askRes) { askRes(null); askRes = null; } flush(); $('#sheet').classList.remove('on', 'full'); if (S.view === 'entry') rerender(); }
 
 let keyPending = false, rkShown = '';
 function showRecoveryKey(code) {
@@ -1115,14 +1118,14 @@ function openPhoto(id) {
   const days = range(e.start, e.end);
   if (!days.includes(p.day)) days.unshift(p.day);
   const ps = photosOf(e), isCover = (ps.find(x => x.id === e.coverId) || ps[0]) === p;
-  openSheet(`<img class="big" src="${purl(p)}" alt="">
+  openSheet(`${p.kind === 'video' ? `<video class="big" src="${vurl(p)}" poster="${p.poster}" controls playsinline preload="metadata"></video>` : `<img class="big" src="${purl(p)}" alt="">`}
     <div class="pform">
       <label>Caption<textarea data-field="pcap" data-id="${id}" placeholder="What's happening here?">${esc(p.caption)}</textarea></label>
       <label>Day<select data-change="pday" data-id="${id}">${days.map(d => `<option value="${d}"${d === p.day ? ' selected' : ''}>${fmt(d, SHORT)}</option>`).join('')}</select></label>
       <label>Place, if different from that day<input data-field="pplace" data-id="${id}" value="${esc(p.place)}" placeholder="${esc(e.days[p.day] || 'Same as the day')}" autocomplete="off"></label>
     </div>
     ${isCover ? `<div class="coverbtn on">${ico('check', 17, '#33502A', 2.6)}This is the chapter cover</div>` : `<button class="coverbtn" data-act="set-cover" data-id="${id}">${ico('img', 18, '#B5562F', 2)}Use as the chapter cover</button>`}
-    <div class="pact"><button class="btn pri" data-act="close-sheet">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete photo</button></div>`);
+    <div class="pact"><button class="btn pri" data-act="close-sheet">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete ${p.kind === 'video' ? 'video' : 'photo'}</button></div>`);
 }
 
 // ---------- actions ----------
@@ -1172,6 +1175,26 @@ async function compress(file) {
     if (c) { c.width = c.height = 0; } // iPhone Safari keeps canvas memory until told otherwise; a batch of big photos can run it dry
   }
 }
+const VIDEO_MAX_SEC = 60, VIDEO_MAX_MB = 300;
+const isVideo = f => /^video\//.test(f.type) || /\.(mov|mp4|m4v)$/i.test(f.name || '');
+async function videoInfo(file) { // length and a poster frame, read by playing the clip silently off-screen
+  const url = URL.createObjectURL(file), v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.preload = 'metadata'; v.src = url;
+  const wait = (ev, ms) => new Promise((res, rej) => { const t = setTimeout(() => rej(new Error(ev + ' timeout')), ms); v.addEventListener(ev, () => { clearTimeout(t); res(); }, { once: true }); v.addEventListener('error', () => { clearTimeout(t); rej(new Error('unreadable video')); }, { once: true }); });
+  try {
+    await wait('loadedmetadata', 20000);
+    const dur = v.duration;
+    let poster = '';
+    try {
+      v.currentTime = Math.min(0.3, (dur || 1) / 2); await wait('seeked', 8000);
+      const k = Math.min(1, 640 / Math.max(v.videoWidth, v.videoHeight)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(v.videoWidth * k)); c.height = Math.max(1, Math.round(v.videoHeight * k));
+      c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); poster = c.toDataURL('image/jpeg', 0.72); c.width = c.height = 0;
+    } catch {}
+    if (!poster) { const c = document.createElement('canvas'); c.width = 320; c.height = 320; const x = c.getContext('2d'); x.fillStyle = '#E9DFCF'; x.fillRect(0, 0, 320, 320); poster = c.toDataURL('image/jpeg', 0.7); }
+    return { dur, poster };
+  } finally { v.removeAttribute('src'); v.load(); URL.revokeObjectURL(url); }
+}
 async function delEntry(e) {
   if (!confirm(`Delete Chapter ${chapterNo(e)} and its photos? This can't be undone.`)) return;
   timers.delete('e' + e.id);
@@ -1183,28 +1206,38 @@ async function delEntry(e) {
 }
 async function addPhotos(files, e) {
   const n = files.length, plural = n > 1 ? 's' : '';
-  toast(`Adding ${n} photo${plural}…`);
-  let bad = 0, done = 0;
+  toast(`Adding ${n} item${plural}…`);
+  let bad = 0, done = 0, vids = 0; const tooLong = [];
   for (const f of files) {
     try {
-      let blob;
-      try { blob = await compress(f); }
-      catch { // one more go after letting the phone free some memory; then keep the original if it is already a normal image
-        await new Promise(r => setTimeout(r, 250));
+      let blob, extra = {};
+      if (isVideo(f)) {
+        if (f.size > VIDEO_MAX_MB * MB) { tooLong.push(f); continue; }
+        const info = await videoInfo(f);
+        if (info.dur > VIDEO_MAX_SEC + 1) { tooLong.push(f); continue; }
+        blob = f; extra = { kind: 'video', mime: f.type || 'video/quicktime', poster: info.poster, dur: Math.round(info.dur * 10) / 10 }; vids++;
+      } else {
         try { blob = await compress(f); }
-        catch { if (/^image\/(jpeg|png|webp)$/.test(f.type) && f.size < 12 * MB) blob = f; else throw 0; }
+        catch { // one more go after letting the phone free some memory; then keep the original if it is already a normal image
+          await new Promise(r => setTimeout(r, 250));
+          try { blob = await compress(f); }
+          catch { if (/^image\/(jpeg|png|webp)$/.test(f.type) && f.size < 12 * MB) blob = f; else throw 0; }
+        }
       }
       let day = f.lastModified ? iso(new Date(f.lastModified)) : e.start;
       if (day < e.start || day > e.end) day = e.start;
-      const p = { id: uid(), entryId: e.id, blob, caption: '', day, place: '', added: Date.now() };
+      const p = { id: uid(), entryId: e.id, blob, caption: '', day, place: '', added: Date.now(), ...extra };
       await putPhoto(p); S.photos.push(p); done++;
     } catch { bad++; }
-    if (n > 1) { toast(`Adding photos… ${done + bad} of ${n}`); if (done % 4 === 0) rerender(); }
-    await new Promise(r => setTimeout(r, 30)); // let the screen breathe between photos
+    if (n > 1) { toast(`Adding… ${done + bad + tooLong.length} of ${n}`); if (done % 4 === 0) rerender(); }
+    await new Promise(r => setTimeout(r, 30)); // let the screen breathe between items
   }
   rerender();
-  if (bad) { const s2 = bad > 1 ? 's' : ''; toast(`${done} added, ${bad} photo${s2} couldn't be read. ` + (navigator.onLine ? `Try adding ${bad > 1 ? 'them' : 'it'} again` : `If ${bad > 1 ? 'they are' : 'it is'} still in iCloud, add ${bad > 1 ? 'them' : 'it'} again once you have signal`)); }
-  else toast(done > 1 ? `${done} photos added` : 'Photo added');
+  const msg = [];
+  if (done) msg.push(done > 1 ? `${done} added` : (vids ? 'Video added' : 'Photo added'));
+  if (tooLong.length) msg.push(`${tooLong.length} video${tooLong.length > 1 ? 's' : ''} over ${VIDEO_MAX_SEC} seconds (or ${VIDEO_MAX_MB} MB) not added. Trim ${tooLong.length > 1 ? 'them' : 'it'} in Photos first`);
+  if (bad) msg.push(`${bad} couldn't be read. ` + (navigator.onLine ? 'Try again' : 'If still in iCloud, try again once you have signal'));
+  toast(msg.join('. ') || 'Nothing added', tooLong.length || bad ? 6000 : undefined);
 }
 
 // ---------- sort into prompts, and the coffee-table story ----------
@@ -1391,7 +1424,7 @@ async function shareChapter(e) {
   flush();
   const n = chapterNo(e), ps = photosOf(e), names = ps.map((p, j) => photoName(n, j, p));
   const md = CHAPTER_PROMPT(n) + '\n\n---\n\n' + chapterMd(e, n, ps, names);
-  const files = [new File([md], `chapter-${pad2(n)}.md`, { type: 'text/plain' }), ...ps.map((p, j) => new File([p.blob], names[j], { type: 'image/jpeg' }))];
+  const files = [new File([md], `chapter-${pad2(n)}.md`, { type: 'text/plain' }), ...ps.map((p, j) => new File([p.blob], names[j], { type: p.blob.type || 'image/jpeg' }))];
   if (navigator.canShare && navigator.canShare({ files })) {
     try { await navigator.share({ files, title: `Chapter ${n}` }); } catch (err) { if (err.name !== 'AbortError') toast("Couldn't open the share sheet"); }
     return;
@@ -1448,7 +1481,7 @@ async function restore(file) {
       $('#sheet').classList.remove('on');
       const ml = new DataView(plain).getUint32(0), meta = JSON.parse(td.decode(new Uint8Array(plain, 4, ml)));
       let off = 4 + ml;
-      const photos = meta.photos.map(({ size, ...rest }) => { const blob = new Blob([plain.slice(off, off + size)], { type: 'image/jpeg' }); off += size; return { ...rest, blob }; });
+      const photos = meta.photos.map(({ size, ...rest }) => { const blob = new Blob([plain.slice(off, off + size)], { type: rest.mime || 'image/jpeg' }); off += size; return { ...rest, blob }; });
       const audio = (meta.audio || []).map(({ size, ...m }) => { const blob = new Blob([plain.slice(off, off + size)], { type: m.mime }); off += size; return { m, blob }; });
       data = { entries: meta.entries, photos, audio, geo: meta.geo || {}, at: meta.at };
     } else {
