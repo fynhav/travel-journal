@@ -1175,7 +1175,7 @@ async function compress(file) {
     if (c) { c.width = c.height = 0; } // iPhone Safari keeps canvas memory until told otherwise; a batch of big photos can run it dry
   }
 }
-const VIDEO_MAX_SEC = 60, VIDEO_MAX_MB = 300;
+const VIDEO_MAX_SEC = 60, VIDEO_MAX_MB = 150;
 const isVideo = f => /^video\//.test(f.type) || /\.(mov|mp4|m4v)$/i.test(f.name || '');
 async function videoInfo(file) { // length and a poster frame, read by playing the clip silently off-screen
   const url = URL.createObjectURL(file), v = document.createElement('video');
