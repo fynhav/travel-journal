@@ -396,7 +396,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-09.27'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-15.28'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -1233,16 +1233,29 @@ function startRec(e, t) {
 }
 
 async function compress(file) {
-  const url = URL.createObjectURL(file);
+  let bmp = null, url = '', c = null;
   try {
-    const img = new Image();
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
-    const c = document.createElement('canvas');
-    c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
-  } finally { URL.revokeObjectURL(url); }
+    let src, w, h;
+    if (self.createImageBitmap) { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch { bmp = null; } }
+    if (bmp) { src = bmp; w = bmp.width; h = bmp.height; }
+    else {
+      url = URL.createObjectURL(file);
+      const img = new Image();
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+      src = img; w = img.naturalWidth; h = img.naturalHeight;
+    }
+    const k = Math.min(1, 1600 / Math.max(w, h));
+    c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    const blob = await new Promise(res => c.toBlob(res, 'image/jpeg', 0.82));
+    if (!blob) throw new Error('encode failed');
+    return blob;
+  } finally {
+    if (bmp && bmp.close) bmp.close();
+    if (url) URL.revokeObjectURL(url);
+    if (c) { c.width = c.height = 0; } // iPhone Safari keeps canvas memory until told otherwise; a batch of big photos can run it dry
+  }
 }
 async function delEntry(e) {
   if (!confirm(`Delete Chapter ${chapterNo(e)} and its photos? This can't be undone.`)) return;
@@ -1254,20 +1267,29 @@ async function delEntry(e) {
   S.view = 'chapters'; S.openId = null; render();
 }
 async function addPhotos(files, e) {
-  toast(`Adding ${files.length} photo${files.length > 1 ? 's' : ''}…`);
-  let bad = 0;
+  const n = files.length, plural = n > 1 ? 's' : '';
+  toast(`Adding ${n} photo${plural}…`);
+  let bad = 0, done = 0;
   for (const f of files) {
     try {
-      const blob = await compress(f);
+      let blob;
+      try { blob = await compress(f); }
+      catch { // one more go after letting the phone free some memory; then keep the original if it is already a normal image
+        await new Promise(r => setTimeout(r, 250));
+        try { blob = await compress(f); }
+        catch { if (/^image\/(jpeg|png|webp)$/.test(f.type) && f.size < 12 * MB) blob = f; else throw 0; }
+      }
       let day = f.lastModified ? iso(new Date(f.lastModified)) : e.start;
       if (day < e.start || day > e.end) day = e.start;
       const p = { id: uid(), entryId: e.id, blob, caption: '', day, place: '', added: Date.now() };
-      await putPhoto(p); S.photos.push(p);
+      await putPhoto(p); S.photos.push(p); done++;
     } catch { bad++; }
+    if (n > 1) { toast(`Adding photos… ${done + bad} of ${n}`); if (done % 4 === 0) rerender(); }
+    await new Promise(r => setTimeout(r, 30)); // let the screen breathe between photos
   }
   rerender();
-  if (bad) { const s2 = bad > 1 ? 's' : ''; toast(navigator.onLine ? `${bad} photo${s2} couldn't be read. Try adding ${bad > 1 ? 'them' : 'it'} again` : `${bad} photo${s2} couldn't be read. If ${bad > 1 ? 'they are' : 'it is'} still in iCloud, add ${bad > 1 ? 'them' : 'it'} again once you have signal`); }
-  else toast('Photos added');
+  if (bad) { const s2 = bad > 1 ? 's' : ''; toast(`${done} added, ${bad} photo${s2} couldn't be read. ` + (navigator.onLine ? `Try adding ${bad > 1 ? 'them' : 'it'} again` : `If ${bad > 1 ? 'they are' : 'it is'} still in iCloud, add ${bad > 1 ? 'them' : 'it'} again once you have signal`)); }
+  else toast(done > 1 ? `${done} photos added` : 'Photo added');
 }
 
 // ---------- sort into prompts, and the coffee-table story ----------
@@ -3018,7 +3040,6 @@ document.addEventListener('click', async ev => {
     case 'share': shareChapter(e); break;
     case 'export-book': exportBook(); break;
     case 'backup': backup(); break;
-const APP_VERSION = '2026-11-09.27'; // bump on every release; the Check for updates button compares against it
     case 'erase': Lock.erase(); break;
     case 'forgot': Lock.setMode('recover'); break;
     case 'back-unlock': Lock.setMode('unlock'); break;
