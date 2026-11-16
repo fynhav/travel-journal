@@ -7,7 +7,7 @@ const ROOT = path.join(__dirname, '..'), PORT = process.env.PORT || 3000;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: process.env.PGSSL === '1' ? { rejectUnauthorized: false } : undefined, max: 5 });
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.webmanifest': 'application/manifest+json', '.css': 'text/css' };
 const STATIC = new Set(['index.html', 'sw.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png']);
-const STORES = new Set(['entries', 'photos', 'audio', 'meta']);
+const STORES = new Set(['entries', 'photos', 'audio', 'meta', 'vblobs']);
 const MAX_BODY = 200 * 1024 * 1024; // a 150 MB video plus overhead
 
 async function init() {
@@ -64,6 +64,11 @@ async function api(req, res, url) {
     const r = await pool.query('SELECT data, deleted FROM records WHERE vault=$1 AND store=$2 AND id=$3', [vault, p[1], decodeURIComponent(p[2] || '')]);
     if (!r.rows.length || r.rows[0].deleted || !r.rows[0].data) return json(res, 404, { error: 'not found' });
     return send(res, 200, r.rows[0].data, { 'content-type': 'application/octet-stream' });
+  }
+  // GET /api/has/:store/:id -> {size}: lets the phone confirm a big upload arrived whole before it lets go of its copy
+  if (p[0] === 'has') {
+    const r = await pool.query('SELECT length(data) AS size, deleted FROM records WHERE vault=$1 AND store=$2 AND id=$3', [vault, p[1], decodeURIComponent(p[2] || '')]);
+    return json(res, 200, { size: r.rows.length && !r.rows[0].deleted ? (r.rows[0].size || 0) : -1 });
   }
   // GET /api/stats -> counts, so the app can show "N chapters, M photos safe"
   if (p[0] === 'stats') {

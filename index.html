@@ -141,6 +141,7 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:blo
 .ph{aspect-ratio:1;border-radius:16px;overflow:hidden;border:0;padding:0;background:var(--line);cursor:pointer;position:relative}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
 .ph .play{position:absolute;left:6px;top:6px;background:rgba(46,40,35,.62);color:#fff;border-radius:999px;font-size:10px;line-height:1;padding:5px 8px;display:flex;gap:5px;align-items:center}.ph .play i{font-style:normal;font-weight:600}
+.vcloud{display:flex;flex-direction:column;gap:10px}.vcloud .btn{margin:0}
 .ph .cap{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(46,40,35,.6));color:#fff;font-size:10.5px;padding:10px 6px 4px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .add-ph{display:flex;align-items:center;justify-content:center;flex-direction:column;background:var(--paper);border:1.5px dashed #D9CBB0;color:var(--muted);font-size:13px}
 .add-ph span:first-child{font-size:26px;line-height:1}
@@ -398,7 +399,7 @@ img.big{width:100%;max-height:45vh;object-fit:contain;border-radius:16px;backgro
 'use strict';
 // ---------- config ----------
 const MODEL = 'claude-haiku-5-5';
-const APP_VERSION = '2026-11-15.29'; // bump on every release; the Check for updates button compares against it
+const APP_VERSION = '2026-11-15.30'; // bump on every release; the Check for updates button compares against it
 const FIXED = [
  "What's the first thing you remember about arriving here?",
  "What did it smell, sound and taste like?",
@@ -652,12 +653,17 @@ const Vault = {
 async function encEntry(e, key = Vault.key) { const { iv, ct } = await Vault.seal(te.encode(JSON.stringify(e)), key); return { id: e.id, iv, ct }; }
 async function decEntry(r) { return JSON.parse(td.decode(await Vault.open(r))); }
 async function encPhoto(p, key = Vault.key) {
-  const { blob, ...meta } = p;
-  const m = await Vault.seal(te.encode(JSON.stringify(meta)), key), b = await Vault.seal(await blob.arrayBuffer(), key);
-  return { id: p.id, iv: m.iv, ct: m.ct, biv: b.iv, bct: b.ct };
+  const { blob, off, ...meta } = p; // off: a video whose bytes live only in the cloud copy
+  const m = await Vault.seal(te.encode(JSON.stringify(meta)), key);
+  if (off || !blob) return { id: p.id, iv: m.iv, ct: m.ct, vid: 1, off: 1 };
+  const b = await Vault.seal(await blob.arrayBuffer(), key), row = { id: p.id, iv: m.iv, ct: m.ct, biv: b.iv, bct: b.ct };
+  if (p.kind === 'video') row.vid = 1;
+  return row;
 }
 async function decPhoto(r) {
-  const meta = JSON.parse(td.decode(await Vault.open(r))), bytes = await Vault.open({ iv: r.biv, ct: r.bct });
+  const meta = JSON.parse(td.decode(await Vault.open(r)));
+  if (r.off || !r.biv) return { ...meta, blob: null, off: true };
+  const bytes = await Vault.open({ iv: r.biv, ct: r.bct });
   return { ...meta, blob: new Blob([bytes], { type: meta.mime || 'image/jpeg' }) };
 }
 async function encAudio(m, blob, key = Vault.key) {
@@ -718,6 +724,7 @@ const Sync = {
       const r = await DB.get('meta', 'sync'); this.cfg = r ? JSON.parse(td.decode(await Vault.open(r))) : null;
       this.last = +lsGet('tj.syncLast') || 0; try { this.dirty = new Set(JSON.parse(lsGet('tj.dirty') || '[]')); } catch { this.dirty = new Set(); }
     } catch { this.cfg = null; }
+    if (this.cfg) for (const p of S.photos) if (p.kind === 'video' && !p.off) this.mark('photos', p.id); // clips added before they could go to the cloud
     this.paint(); if (this.cfg) this.soon(1500);
   },
   mark(s, id) {
@@ -746,8 +753,14 @@ const Sync = {
         await Promise.all(batch.map(async key => {
           const i = key.indexOf('/'), s = key.slice(0, i), id = key.slice(i + 1), tag = this.tags.get(key) || 0;
           if (s === 'audio' && S.audio.some(a => a.id === id && a.status === 'recording')) return; // still being recorded: wait until it is saved
-          const row = await DB.get(s, id), q = `put/${s}/${encodeURIComponent(id)}?ver=${Date.now()}`;
-          await this.call('PUT', row ? q : q + '&deleted=1', row ? packRow(row) : new Blob([]));
+          const q = x => `put/${x}/${encodeURIComponent(id)}?ver=${Date.now()}`;
+          if (s === 'vblobs') { // a video's bytes: only ever sent as part of its photo record, so here we only handle deletion
+            if (!(await DB.get('photos', id))) await this.call('PUT', q('vblobs') + '&deleted=1', new Blob([]));
+            if ((this.tags.get(key) || 0) === tag) this.dirty.delete(key); moved++; return;
+          }
+          const row = await DB.get(s, id);
+          if (s === 'photos' && row && (row.vid || (S.photos.find(x => x.id === id) || {}).kind === 'video')) { await this.sendVideo(row, id, q, key, tag); moved++; return; }
+          await this.call('PUT', row ? q(s) : q(s) + '&deleted=1', row ? packRow(row) : new Blob([]));
           if ((this.tags.get(key) || 0) === tag) this.dirty.delete(key); moved++;
         }));
         lsSet('tj.dirty', JSON.stringify([...this.dirty])); this.paint();
@@ -756,6 +769,26 @@ const Sync = {
       if (!this.dirty.size) { this.last = Date.now(); lsSet('tj.syncLast', String(this.last)); await this.verify(); }
     } catch (e) { this.err = (e && e.message) || 'no connection'; }
     finally { this.busy = false; this.paint(); if (this.cfg && (this.err || this.dirty.size)) this.soon(this.err ? 30000 : 15000); }
+  },
+  async sendVideo(row, id, q, key, tag) { // the clip goes up as its own record, the caption and poster as the photo record; then the phone lets go of the bytes
+    if (row.biv) {
+      const blob = packRow({ iv: row.biv, ct: row.bct });
+      await this.call('PUT', q('vblobs'), blob);
+      const has = await (await this.call('GET', `has/vblobs/${encodeURIComponent(id)}`)).json();
+      if (has.size !== blob.size) throw new Error('the cloud did not keep the whole video');
+    }
+    await this.call('PUT', q('photos'), packRow({ id: row.id, iv: row.iv, ct: row.ct, vid: 1, off: 1 }));
+    if ((this.tags.get(key) || 0) === tag) this.dirty.delete(key);
+    if (!row.biv) return;
+    await new Promise((res, rej) => { // swap the row for a meta-only one, in one step so a caption edit cannot be lost
+      const t = DB.db.transaction('photos', 'readwrite'), o = t.objectStore('photos'), g = o.get(id);
+      g.onsuccess = () => { const r = g.result; if (r && r.biv) o.put({ id: r.id, iv: r.iv, ct: r.ct, vid: 1, off: 1 }); };
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+    const ph = S.photos.find(x => x.id === id); if (ph) { ph.blob = null; ph.off = true; }
+    const k = 'v' + id; if (urls.has(k)) { URL.revokeObjectURL(urls.get(k)); urls.delete(k); }
+    if (S.view === 'entry' && !$('#sheet').classList.contains('on')) rerender();
+    Store.refresh();
   },
   async verify() { // does the server hold what this phone holds?
     try {
@@ -802,7 +835,8 @@ function paintStore() {
 }
 const urls = new Map();
 const purl = p => { if (p.kind === 'video') return p.poster; if (!urls.has(p.id)) urls.set(p.id, URL.createObjectURL(p.blob)); return urls.get(p.id); }; // videos show their poster frame wherever a photo would
-const vurl = p => { const k = 'v' + p.id; if (!urls.has(k)) urls.set(k, URL.createObjectURL(p.blob)); return urls.get(k); };
+const vcache = new Map(); // videos fetched back from the cloud for playing; never kept on the phone
+const vurl = p => { const k = 'v' + p.id, b = p.blob || vcache.get(p.id); if (!b) return ''; if (!urls.has(k)) urls.set(k, URL.createObjectURL(b)); return urls.get(k); };
 const cur = () => S.entries.find(x => x.id === S.openId);
 const entryOn = d => S.entries.find(e => e.start <= d && d <= e.end);
 const overlaps = (a, b, except) => S.entries.some(x => x.id !== except && x.start <= b && a <= x.end);
@@ -1056,7 +1090,7 @@ function entryHTML(e) {
     <div class="cd story-box"><div class="q" style="margin-bottom:6px">Your story</div><textarea data-field="talk" placeholder="Tap Record and tell it in your own words, or type here…">${esc(e.talk)}</textarea><div class="voice" data-t="talk"></div></div>
     ${old.length ? `<details class="earlier"><summary>Earlier answers (${old.length})</summary>${old.map(([x, i]) => `<div class="cd"><div class="q" style="margin-bottom:6px">${esc(x.q || 'Your own heading')}</div><textarea data-field="qa" data-i="${i}">${esc(x.a)}</textarea></div>`).join('')}</details>` : ''}`;
   } else if (tab === 'photos') {
-    body = `<section class="sec"><div class="photos">${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.kind === 'video' ? `<span class="play" aria-label="Video">▶${p.dur ? `<i>${Math.round(p.dur)}s</i>` : ''}</span>` : ''}${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}<label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*,video/*" multiple data-change="photos" hidden></label></div></section>`;
+    body = `<section class="sec"><div class="photos">${ps.map(p => `<button class="ph" data-act="photo" data-id="${p.id}"><img src="${purl(p)}" alt="">${p.kind === 'video' ? `<span class="play" aria-label="Video">▶${p.dur ? `<i>${Math.round(p.dur)}s</i>` : ''}${p.off ? '<i>☁</i>' : ''}</span>` : ''}${p.caption ? `<span class="cap">${esc(p.caption)}</span>` : ''}</button>`).join('')}<label class="ph add-ph"><span>＋</span><span>Add photos</span><input type="file" accept="image/*,video/*" multiple data-change="photos" hidden></label></div></section>`;
   } else if (tab === 'notes') {
     body = `<div class="cd"><div class="q" style="margin-bottom:6px">Anything else</div><textarea data-field="notes" placeholder="Free notes…">${esc(e.notes)}</textarea><div class="voice" data-t="notes"></div></div>`;
   } else {
@@ -1138,7 +1172,7 @@ function openSettings() {
       <p class="hint" style="margin-top:14px">${lastB ? 'Last backup: ' + new Date(lastB).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'No backup yet'}. In the share sheet, choose “Save to Files” → iCloud Drive. Backups are encrypted, so you'll need your password to restore one.</p>
       <div class="btns"><button class="btn pri" data-act="backup">Back up now</button><label class="btn" style="color:var(--ink);margin:0">Restore from backup…<input type="file" data-change="restore" hidden></label></div></section>
     <section class="sec"><h2>Cloud copy</h2>
-      <p class="hint" style="margin-top:0">An encrypted copy of the journal is kept on your own server, so losing this phone cannot lose the journal. The server only ever sees scrambled data.</p>
+      <p class="hint" style="margin-top:0">An encrypted copy of the journal is kept on your own server, so losing this phone cannot lose the journal. The server only ever sees scrambled data. Videos move to the cloud once they are saved there, and download again when you tap them, so they need signal to play.</p>
       <p class="hint" id="syncst" style="color:var(--ink)"></p><div id="synccode"></div>
       <div class="btns">${Sync.cfg ? '<button class="btn pri" data-act="sync-now">Save now</button><button class="btn" data-act="sync-code">Show sync code</button>' : '<button class="btn pri" data-act="sync-on">Turn on cloud copy</button>'}</div></section>
     <section class="sec"><h2>The book</h2>
@@ -1203,7 +1237,7 @@ function openPhoto(id) {
   const days = range(e.start, e.end);
   if (!days.includes(p.day)) days.unshift(p.day);
   const ps = photosOf(e), isCover = (ps.find(x => x.id === e.coverId) || ps[0]) === p;
-  openSheet(`${p.kind === 'video' ? `<video class="big" src="${vurl(p)}" poster="${p.poster}" controls playsinline preload="metadata"></video>` : `<img class="big" src="${purl(p)}" alt="">`}
+  openSheet(`${p.kind === 'video' ? (vurl(p) ? `<video class="big" src="${vurl(p)}" poster="${p.poster}" controls playsinline preload="metadata"></video>` : `<div class="vcloud"><img class="big" src="${p.poster}" alt=""><button class="btn pri" data-act="vid-load" data-id="${id}" id="vidLoad">☁ Load video from the cloud</button><p class="hint" id="vidMsg">This video lives in your cloud copy to save phone space. It downloads when you play it, so you need signal.</p></div>`) : `<img class="big" src="${purl(p)}" alt="">`}
     <div class="pform">
       <label>Caption<textarea data-field="pcap" data-id="${id}" placeholder="What's happening here?">${esc(p.caption)}</textarea></label>
       <label>Day<select data-change="pday" data-id="${id}">${days.map(d => `<option value="${d}"${d === p.day ? ' selected' : ''}>${fmt(d, SHORT)}</option>`).join('')}</select></label>
@@ -1211,6 +1245,22 @@ function openPhoto(id) {
     </div>
     ${isCover ? `<div class="coverbtn on">${ico('check', 17, '#33502A', 2.6)}This is the chapter cover</div>` : `<button class="coverbtn" data-act="set-cover" data-id="${id}">${ico('img', 18, '#B5562F', 2)}Use as the chapter cover</button>`}
     <div class="pact"><button class="btn pri" data-act="close-sheet">Done</button><button class="btn danger" data-act="del-photo" data-id="${id}">Delete ${p.kind === 'video' ? 'video' : 'photo'}</button></div>`);
+}
+
+async function loadVideo(id) {
+  const p = S.photos.find(x => x.id === id), msg = $('#vidMsg'), btn = $('#vidLoad'); if (!p) return;
+  if (!navigator.onLine) { toast('You need signal to load this video'); return; }
+  if (!Sync.cfg) { toast('The cloud copy is switched off, so this video can’t be fetched'); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const r = await Sync.call('GET', `get/vblobs/${encodeURIComponent(id)}`), total = +r.headers.get('content-length') || 0, rd = r.body.getReader(), parts = []; let got = 0;
+    for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; if (msg && total) msg.textContent = `Downloading… ${Math.round(got / total * 100)}%`; }
+    if (msg) msg.textContent = 'Unlocking…';
+    const row = unpackRow(await new Blob(parts).arrayBuffer()), bytes = await Vault.open({ iv: row.iv, ct: row.ct });
+    vcache.clear(); const k = 'v' + id; if (urls.has(k)) { URL.revokeObjectURL(urls.get(k)); urls.delete(k); }
+    vcache.set(id, new Blob([bytes], { type: p.mime || 'video/mp4' }));
+    if ($('#sheet').classList.contains('on')) openPhoto(id);
+  } catch (e) { if (btn) btn.disabled = false; if (msg) msg.textContent = e && e.status === 404 ? 'The cloud copy does not have this video.' : 'Could not download it: ' + ((e && e.message) || 'no connection'); }
 }
 
 // ---------- actions ----------
@@ -1283,7 +1333,7 @@ async function videoInfo(file) { // length and a poster frame, read by playing t
 async function delEntry(e) {
   if (!confirm(`Delete Chapter ${chapterNo(e)} and its photos? This can't be undone.`)) return;
   timers.delete('e' + e.id);
-  for (const p of photosOf(e)) { await DB.del('photos', p.id); }
+  for (const p of photosOf(e)) { await DB.del('photos', p.id); if (p.kind === 'video') Sync.mark('vblobs', p.id); }
   S.photos = S.photos.filter(p => p.entryId !== e.id);
   for (const a of S.audio.filter(a => a.entryId === e.id)) await dropAudio(a.id);
   await DB.del('entries', e.id); S.entries = S.entries.filter(x => x.id !== e.id);
@@ -1509,7 +1559,7 @@ async function shareChapter(e) {
   flush();
   const n = chapterNo(e), ps = photosOf(e), names = ps.map((p, j) => photoName(n, j, p));
   const md = CHAPTER_PROMPT(n) + '\n\n---\n\n' + chapterMd(e, n, ps, names);
-  const files = [new File([md], `chapter-${pad2(n)}.md`, { type: 'text/plain' }), ...ps.map((p, j) => new File([p.blob], names[j], { type: p.blob.type || 'image/jpeg' }))];
+  const files = [new File([md], `chapter-${pad2(n)}.md`, { type: 'text/plain' }), ...ps.map((p, j) => p.blob ? new File([p.blob], names[j], { type: p.blob.type || 'image/jpeg' }) : null).filter(Boolean)];
   if (navigator.canShare && navigator.canShare({ files })) {
     try { await navigator.share({ files, title: `Chapter ${n}` }); } catch (err) { if (err.name !== 'AbortError') toast("Couldn't open the share sheet"); }
     return;
@@ -1527,7 +1577,7 @@ async function exportBook() {
   chapters().forEach((e, i) => {
     const n = i + 1, ps = photosOf(e), names = ps.map((p, j) => photoName(n, j, p));
     book += chapterMd(e, n, ps, names) + '\n\n---\n\n';
-    ps.forEach((p, j) => zip.file('photos/' + names[j], p.blob));
+    ps.forEach((p, j) => { if (p.blob) zip.file('photos/' + names[j], p.blob); });
   });
   zip.file('PROMPT.md', BOOK_PROMPT); zip.file('journal.md', book);
   const blob = await zip.generateAsync({ type: 'blob' });
@@ -1537,7 +1587,7 @@ async function backup() {
   flush();
   toast('Preparing backup…');
   const parts = [], pm = [];
-  for (const p of S.photos) { const { blob, ...rest } = p, buf = await blob.arrayBuffer(); pm.push({ ...rest, size: buf.byteLength }); parts.push(buf); }
+  for (const p of S.photos) { const { blob, ...rest } = p; if (!blob) { pm.push({ ...rest, off: true, size: 0 }); continue; } const buf = await blob.arrayBuffer(); pm.push({ ...rest, size: buf.byteLength }); parts.push(buf); }
   const am = [];
   for (const m of S.audio.filter(a => a.status !== 'recording')) { const buf = await (await getAudioBlob(m.id)).arrayBuffer(); am.push({ ...m, size: buf.byteLength }); parts.push(buf); }
   const meta = te.encode(JSON.stringify({ entries: S.entries, photos: pm, audio: am, geo: Vault.geo || {}, at: new Date().toISOString() }));
@@ -1566,7 +1616,7 @@ async function restore(file) {
       $('#sheet').classList.remove('on');
       const ml = new DataView(plain).getUint32(0), meta = JSON.parse(td.decode(new Uint8Array(plain, 4, ml)));
       let off = 4 + ml;
-      const photos = meta.photos.map(({ size, ...rest }) => { const blob = new Blob([plain.slice(off, off + size)], { type: rest.mime || 'image/jpeg' }); off += size; return { ...rest, blob }; });
+      const photos = meta.photos.map(({ size, ...rest }) => { const blob = rest.off ? null : new Blob([plain.slice(off, off + size)], { type: rest.mime || 'image/jpeg' }); off += size; return { ...rest, blob }; });
       const audio = (meta.audio || []).map(({ size, ...m }) => { const blob = new Blob([plain.slice(off, off + size)], { type: m.mime }); off += size; return { m, blob }; });
       data = { entries: meta.entries, photos, audio, geo: meta.geo || {}, at: meta.at };
     } else {
@@ -2934,6 +2984,11 @@ document.addEventListener('click', async ev => {
     case 'today': { const n = new Date(); S.month = new Date(n.getFullYear(), n.getMonth(), 1); render(); break; }
     case 'settings': openSettings(); break;
     case 'close-sheet': closeSheet(); break;
+    case 'vid-load': loadVideo(t.dataset.id); break;
+    case 'sync-on': Sync.enable().then(() => openSettings()); break;
+    case 'sync-now': Sync.info = ''; Sync.run(); break;
+    case 'sync-code': Sync.showCode = !Sync.showCode; Sync.paint(); break;
+    case 'lock-now': Lock.stay = false; DB.del('meta', 'staykey').catch(() => {}).then(() => Lock.lock()); break;
     case 'day': {
       const d = t.dataset.d;
       if (S.select) {
@@ -3052,7 +3107,7 @@ document.addEventListener('click', async ev => {
     case 'del-photo': {
       if (!confirm('Delete this photo from the journal?')) break;
       const id = t.dataset.id; timers.delete('p' + id);
-      await DB.del('photos', id); S.photos = S.photos.filter(p => p.id !== id);
+      const gone = S.photos.find(p => p.id === id); await DB.del('photos', id); if (gone && gone.kind === 'video') { Sync.mark('vblobs', id); vcache.delete(id); } S.photos = S.photos.filter(p => p.id !== id);
       if (urls.has(id)) { URL.revokeObjectURL(urls.get(id)); urls.delete(id); }
       closeSheet(); break;
     }
